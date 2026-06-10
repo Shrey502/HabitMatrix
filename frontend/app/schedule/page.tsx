@@ -22,6 +22,37 @@ export default function SchedulePage() {
   
   const hours = Array.from({length: 24}, (_, i) => i)
 
+  const ZONES = [
+    { id: 'sleep', name: 'SLEEP CYCLE', start: 23, end: 7, bg: 'bg-indigo-900/20', text: 'text-indigo-500/10' },
+    { id: 'office', name: 'OFFICE / DEEP WORK', start: 9, end: 17, bg: 'bg-sky-900/10', text: 'text-sky-500/5' },
+    { id: 'family', name: 'FAMILY & DINNER', start: 18, end: 21, bg: 'bg-rose-900/10', text: 'text-rose-500/5' }
+  ]
+
+  const totalSleep = 8 * 60; // 23:00 to 07:00
+  const totalOffice = 8 * 60; // 09:00 to 17:00
+  const totalFamily = 3 * 60; // 18:00 to 21:00
+  
+  const totalAllocated = totalSleep + totalOffice + totalFamily;
+  const totalDayMins = 24 * 60;
+  const theoreticalFreeTime = totalDayMins - totalAllocated;
+
+  let freeTimeUsed = 0;
+  tasks.filter(t => t.time).forEach(t => {
+      const h = parseInt(t.time.split(':')[0]);
+      const isSleep = h >= 23 || h < 7;
+      const isOffice = h >= 9 && h < 17;
+      const isFamily = h >= 18 && h < 21;
+      
+      if (!isSleep && !isOffice && !isFamily) {
+          freeTimeUsed += (t.duration || 60);
+      }
+  });
+
+  const actualFreeTime = Math.max(0, theoreticalFreeTime - freeTimeUsed);
+  const freeTimeHours = Math.floor(actualFreeTime / 60);
+  const freeTimeMins = actualFreeTime % 60;
+  const freeTimePercent = Math.max(0, 100 - (freeTimeUsed / theoreticalFreeTime) * 100);
+
   useEffect(() => {
     fetchTasks()
   }, [date])
@@ -196,6 +227,22 @@ export default function SchedulePage() {
           </div>
           <p className="text-xs text-zinc-500 font-mono mt-1">Drag and drop tasks into strict hourly execution blocks</p>
         </div>
+        
+        {/* Bandwidth Monitor */}
+        <div className="flex-1 max-w-xl mx-8">
+          <div className="flex justify-between text-[10px] font-mono mb-1.5 uppercase tracking-widest">
+            <span className="text-zinc-500">Daily Bandwidth Monitor</span>
+            <span className="text-emerald-400 font-bold">{freeTimeHours}h {freeTimeMins}m FREE TIME</span>
+          </div>
+          <div className="h-3 w-full bg-zinc-900 rounded-full overflow-hidden flex shadow-inner">
+            <div style={{ width: `${(totalSleep/1440)*100}%` }} className="bg-indigo-600/80 hover:bg-indigo-500 transition-colors cursor-help" title="Sleep Cycle" />
+            <div style={{ width: `${(totalOffice/1440)*100}%` }} className="bg-sky-600/80 hover:bg-sky-500 transition-colors cursor-help" title="Office Time" />
+            <div style={{ width: `${(totalFamily/1440)*100}%` }} className="bg-rose-600/80 hover:bg-rose-500 transition-colors cursor-help" title="Family Time" />
+            <div style={{ width: `${(freeTimeUsed/1440)*100}%` }} className="bg-amber-500/80 hover:bg-amber-400 transition-colors cursor-help" title="Tasks in Free Time" />
+            <div style={{ width: `${(actualFreeTime/1440)*100}%` }} className="bg-emerald-500/20 hover:bg-emerald-500/40 transition-colors cursor-help" title="Available Free Time" />
+          </div>
+        </div>
+
         <input type="date" value={date} onChange={e => setDate(e.target.value)} className="bg-zinc-900 border border-zinc-800 text-zinc-300 rounded p-2 text-sm font-mono focus:outline-none focus:border-amber-500" />
       </div>
 
@@ -203,49 +250,72 @@ export default function SchedulePage() {
         
         {/* 24-Hour Timeline */}
         <div className="flex-[3] bg-zinc-950/50 border border-zinc-800/40 rounded-xl cinematic-panel h-full relative flex flex-col">
-          <div className="flex-1 overflow-y-auto scrollbar-thin p-4">
-            <div className="relative">
-            {hours.map(hour => {
-              const hourStr = `${hour.toString().padStart(2, '0')}:00`
-              const hourTasks = tasks.filter(t => t.time === hourStr)
+          <div className="flex-1 overflow-y-auto scrollbar-thin">
+            <div className="relative h-[1920px] w-full">
+              
+              {/* GRID LAYER */}
+              <div className="absolute inset-0 flex flex-col pointer-events-auto">
+                {hours.map(hour => {
+                  const isSleep = hour >= 23 || hour < 7;
+                  const isOffice = hour >= 9 && hour < 17;
+                  const isFamily = hour >= 18 && hour < 21;
+                  const activeZone = isSleep ? ZONES[0] : isOffice ? ZONES[1] : isFamily ? ZONES[2] : null;
 
-              return (
-                <div 
-                  key={hour} 
-                  className="flex border-b border-zinc-800/50 relative min-h-[80px] group"
-                  onDragOver={allowDrop}
-                  onDrop={(e) => handleDropOnHour(e, hour)}
-                >
-                  <div className="w-16 border-r border-zinc-800/50 text-[10px] font-mono text-zinc-500 pt-2 flex justify-center uppercase select-none">
-                    {hour === 0 ? '12 AM' : hour < 12 ? `${hour} AM` : hour === 12 ? '12 PM' : `${hour - 12} PM`}
-                  </div>
-                  
-                  <div className="flex-1 p-2 flex flex-col gap-2 transition-colors hover:bg-zinc-900/30">
-                    {hourTasks.length === 0 && (
-                       <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition text-[9px] font-mono text-zinc-600 pointer-events-none uppercase tracking-widest">
-                          Drag Task Here
-                       </div>
-                    )}
-                    {hourTasks.map(t => (
-                      <div 
-                        key={t._id} 
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, t._id)}
-                        className={`bg-zinc-900 border-l-2 ${getCatColor(t.category)} p-2 rounded shadow flex items-center gap-3 cursor-grab hover:brightness-125 z-10 relative`}
-                        style={{ minHeight: t.duration ? `${Math.max(40, (t.duration / 60) * 80)}px` : 'auto' }}
-                      >
-                        <GripVertical size={14} className="text-zinc-600" />
-                        <div>
-                          <p className="text-xs font-bold font-mono text-zinc-200">{t.title}</p>
-                          <p className="text-[9px] font-mono text-zinc-500">{t.duration ? `${t.duration} min` : 'Duration unspecified'} • {t.category}</p>
+                  return (
+                    <div 
+                      key={hour} 
+                      className={`flex border-b border-zinc-800/50 relative h-[80px] group ${activeZone ? activeZone.bg : ''}`}
+                      onDragOver={allowDrop}
+                      onDrop={(e) => handleDropOnHour(e, hour)}
+                    >
+                      {activeZone && (
+                        <div className={`absolute right-4 top-1/2 -translate-y-1/2 text-4xl font-black italic tracking-tighter ${activeZone.text} pointer-events-none select-none z-0`}>
+                            {activeZone.name}
+                        </div>
+                      )}
+                      <div className="w-16 border-r border-zinc-800/50 text-[10px] font-mono text-zinc-500 pt-2 flex justify-center uppercase select-none z-10 bg-zinc-950/20 backdrop-blur-[1px]">
+                        {hour === 0 ? '12 AM' : hour < 12 ? `${hour} AM` : hour === 12 ? '12 PM' : `${hour - 12} PM`}
+                      </div>
+                      
+                      <div className="flex-1 p-2 transition-colors hover:bg-zinc-900/30 z-10 relative">
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition text-[9px] font-mono text-zinc-600 pointer-events-none uppercase tracking-widest">
+                            Drag Task Here
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* ABSOLUTE TASK OVERLAY LAYER */}
+              <div className="absolute top-0 right-0 left-16 bottom-0 pointer-events-none z-20">
+                {tasks.filter(t => t.time).map(t => {
+                  const h = parseInt(t.time.split(':')[0])
+                  const dur = t.duration || 60
+                  const topPx = h * 80
+                  const heightPx = (dur / 60) * 80
+                  
+                  return (
+                    <div 
+                      key={t._id} 
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, t._id)}
+                      className={`absolute left-2 right-4 bg-zinc-900/95 backdrop-blur-md border border-zinc-800 border-l-4 ${getCatColor(t.category)} p-2 rounded-lg shadow-xl flex flex-col justify-start gap-1 cursor-grab hover:brightness-125 z-20 pointer-events-auto transition-all`}
+                      style={{ top: `${topPx + 2}px`, height: `${heightPx - 4}px` }}
+                    >
+                      <div className="flex items-start gap-2">
+                        <GripVertical size={14} className="text-zinc-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs font-bold font-mono text-zinc-200 leading-tight">{t.title}</p>
+                          <p className="text-[9px] font-mono text-zinc-500 mt-1">{dur} min • {t.category}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+            </div>
         </div>
         </div>
 

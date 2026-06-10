@@ -29,6 +29,7 @@ class TaskBase(BaseModel):
     time: Optional[str] = None # New: HH:MM (24-hour format)
     duration: Optional[int] = None # Duration in minutes
     reminder_minutes: Optional[int] = 15 # Minutes before task to remind
+    routine_id: Optional[str] = None # Link back to Armory routine
 
 class TaskDB(TaskBase):
     id: Optional[PyObjectId] = Field(alias="_id", default=None)

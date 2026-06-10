@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { Plus, Play, Trash2, Shield, Zap, Target, X } from 'lucide-react'
+import { Plus, Play, Trash2, Shield, Zap, Target, X, Edit2 } from 'lucide-react'
 import { getLocalISODate, getAPIUrl } from '@/components/dateUtils'
 
 const API = getAPIUrl()
@@ -14,6 +14,7 @@ export default function RoutinesPage() {
   const [newTitle, setNewTitle] = useState('')
   const [newDesc, setNewDesc] = useState('')
   const [newTasks, setNewTasks] = useState<{title: string, category: string, duration: number}[]>([])
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchRoutines()
@@ -46,23 +47,50 @@ export default function RoutinesPage() {
     setNewTasks([...newTasks, { title: '', category: 'Development', duration: 30 }])
   }
 
+  const openEditModal = (routine: any) => {
+    setEditingId(routine._id)
+    setNewTitle(routine.title)
+    setNewDesc(routine.description || '')
+    setNewTasks(routine.tasks || [])
+    setIsModalOpen(true)
+  }
+
+  const openNewModal = () => {
+    setEditingId(null)
+    setNewTitle('')
+    setNewDesc('')
+    setNewTasks([])
+    setIsModalOpen(true)
+  }
+
   const saveCustomRoutine = async () => {
     if (!newTitle.trim()) return alert("Needs a title!")
     if (newTasks.length === 0) return alert("Needs at least 1 task!")
     
-    const newRoutine = {
+    const payload = {
       title: newTitle,
       description: newDesc,
       tasks: newTasks
     }
     
-    await fetch(`${API}/api/routines`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newRoutine)
-    })
+    if (editingId) {
+      const doUpdateToday = confirm("Do you want to apply these changes to today's deployed tasks as well?");
+      const today = getLocalISODate();
+      await fetch(`${API}/api/routines/${editingId}?update_today=${doUpdateToday}&date=${today}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+    } else {
+      await fetch(`${API}/api/routines`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+    }
     
     setIsModalOpen(false)
+    setEditingId(null)
     setNewTitle('')
     setNewDesc('')
     setNewTasks([])
@@ -79,7 +107,7 @@ export default function RoutinesPage() {
           </div>
           <p className="text-xs text-zinc-500 font-mono mt-1">Deploy pre-configured task bundles to your daily grid</p>
         </div>
-        <button onClick={() => setIsModalOpen(true)} className="bg-amber-500/10 border border-amber-500/30 text-amber-500 px-4 py-2 rounded-lg font-mono text-xs font-semibold flex items-center gap-2 hover:bg-amber-500/25 transition shadow-[0_0_15px_rgba(251,191,36,0.1)]">
+        <button onClick={openNewModal} className="bg-amber-500/10 border border-amber-500/30 text-amber-500 px-4 py-2 rounded-lg font-mono text-xs font-semibold flex items-center gap-2 hover:bg-amber-500/25 transition shadow-[0_0_15px_rgba(251,191,36,0.1)]">
           <Plus size={14} /> NEW PROTOCOL
         </button>
       </div>
@@ -89,7 +117,10 @@ export default function RoutinesPage() {
           <div key={r._id} className="cinematic-panel border border-zinc-800/40 rounded-xl p-5 flex flex-col group">
             <div className="flex justify-between items-start mb-1">
               <h3 className="text-lg font-bold font-mono text-zinc-100">{r.title}</h3>
-              <button onClick={() => deleteRoutine(r._id)} className="text-zinc-600 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition"><Trash2 size={14}/></button>
+              <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition">
+                 <button onClick={() => openEditModal(r)} className="text-zinc-500 hover:text-amber-400"><Edit2 size={14}/></button>
+                 <button onClick={() => deleteRoutine(r._id)} className="text-zinc-600 hover:text-rose-400"><Trash2 size={14}/></button>
+              </div>
             </div>
             <p className="text-xs text-zinc-500 mb-4 h-8">{r.description}</p>
             
@@ -127,7 +158,7 @@ export default function RoutinesPage() {
             <div className="absolute top-0 left-0 w-full h-1 bg-amber-500" />
             
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-sm font-bold font-mono text-zinc-100 uppercase tracking-widest">Construct New Protocol</h3>
+              <h3 className="text-sm font-bold font-mono text-zinc-100 uppercase tracking-widest">{editingId ? 'Edit Protocol' : 'Construct New Protocol'}</h3>
               <button onClick={() => setIsModalOpen(false)} className="text-zinc-500 hover:text-zinc-300"><X size={16} /></button>
             </div>
 
