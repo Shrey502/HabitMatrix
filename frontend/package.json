@@ -10,8 +10,10 @@
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
+    "@types/canvas-confetti": "^1.9.0",
     "@types/dagre": "^0.7.54",
     "@xyflow/react": "^12.11.0",
+    "canvas-confetti": "^1.9.4",
     "dagre": "^0.8.5",
     "framer-motion": "^12.40.0",
     "lucide-react": "^1.17.0",
