@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { usePathname } from 'next/navigation'
 import { Headphones, Play, Pause, Timer, Radio, Volume2, CloudRain, Coffee, Moon, Activity, Disc3 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -116,7 +117,11 @@ class AudioEngine {
 }
 
 export default function FocusDeck() {
+  const pathname = usePathname()
+  const [tasks, setTasks] = useState<any[]>([])
   const [isOpen, setIsOpen] = useState(false)
+  const [draggedItem, setDraggedItem] = useState<any>(null)
+  
   const [isPlaying, setIsPlaying] = useState(false)
   const [vols, setVols] = useState({ space: 0, rain: 0.8, cafe: 0, binaural: 0 })
   const [is3D, setIs3D] = useState(true)
@@ -177,6 +182,9 @@ export default function FocusDeck() {
     const s = secs % 60
     return `${m}:${s.toString().padStart(2, '0')}`
   }
+
+  const hiddenRoutes = ['/', '/architecture', '/auth', '/onboarding']
+  if (hiddenRoutes.includes(pathname || '')) return null
 
   return (
     <div className="fixed bottom-8 right-8 z-50 flex flex-col items-end">

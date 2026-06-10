@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import tasks, analytics, notifications, goals, journal, routines, calendar
+from routers import tasks, analytics, notifications, goals, journal, routines, calendar, auth
 
 app = FastAPI(title="Habit Tracker API")
 
@@ -12,6 +12,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router, prefix="/api")
 app.include_router(tasks.router, prefix="/api")
 app.include_router(analytics.router, prefix="/api")
 app.include_router(notifications.router, prefix="/api")

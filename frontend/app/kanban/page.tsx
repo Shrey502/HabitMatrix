@@ -251,9 +251,9 @@ export default function KanbanBoard() {
                                     ...provided.draggableProps.style,
                                     boxShadow: completedFlash === task._id
                                       ? '0 0 25px rgba(52,211,153,0.3), inset 0 0 15px rgba(52,211,153,0.05)'
-                                      : snapshot.isDragging ? undefined : provided.draggableProps.style?.boxShadow,
-                                    transform: completedFlash === task._id ? 'scale(1.03)' : provided.draggableProps.style?.transform,
-                                    transition: completedFlash === task._id ? 'all 0.3s ease-out' : provided.draggableProps.style?.transition,
+                                      : snapshot.isDragging ? undefined : (provided.draggableProps.style as any)?.boxShadow,
+                                    transform: completedFlash === task._id ? 'scale(1.03)' : (provided.draggableProps.style as any)?.transform,
+                                    transition: completedFlash === task._id ? 'all 0.3s ease-out' : (provided.draggableProps.style as any)?.transition,
                                   }}
                                 >
                                   {/* Completion flash overlay */}

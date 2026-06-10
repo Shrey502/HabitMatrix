@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 
 /* This @theme block replaces the old tailwind.config.ts file.
@@ -6,7 +6,7 @@
 */
 @theme {
   --font-sans: 'Inter', sans-serif;
-  --font-mono: 'Space Mono', monospace;
+  --font-mono: 'Inter', sans-serif;
 
   --color-zinc-850: #12131a;
   --color-zinc-900: #0a0b10;
@@ -98,11 +98,22 @@
 }
 
 .cinematic-glow {
-  text-shadow: 0 0 12px rgba(251, 191, 36, 0.4);
+  text-shadow: none;
 }
 
 .starlight-glow {
-  text-shadow: 0 0 8px rgba(248, 250, 252, 0.4);
+  text-shadow: none;
+}
+
+/* Strip Sci-Fi Typography Globally */
+@layer utilities {
+  .tracking-widest, .tracking-wider {
+    letter-spacing: normal !important;
+  }
+  .uppercase {
+    text-transform: none !important;
+    font-weight: 500 !important;
+  }
 }
 
 .hud-corner {

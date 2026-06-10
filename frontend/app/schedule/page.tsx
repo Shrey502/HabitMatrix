@@ -158,7 +158,7 @@ export default function SchedulePage() {
       const realH = (TIMELINE_START_HOUR + h) % 24
       const z = h === 24 ? null : getZ(realH)
       if (z !== curZ) {
-        blocks.push({ label: curZ, start: startH, end: h === 24 ? TIMELINE_START_HOUR : realH })
+        blocks.push({ label: curZ as string, start: startH, end: h === 24 ? TIMELINE_START_HOUR : realH })
         curZ = z
         startH = realH
       }

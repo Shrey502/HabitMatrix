@@ -115,11 +115,7 @@ export default function CinematicBackground() {
         }
       })
 
-      // Add a subtle coordinates/telemetry read-out in corner (TARS style)
-      ctx.font = '8px monospace'
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)'
-      ctx.fillText(`WARP_FACTOR: 0.35c`, 24, height - 36)
-      ctx.fillText(`GRAVITY_REF: ${mouse.x.toFixed(1)} : ${mouse.y.toFixed(1)}`, 24, height - 24)
+      // Removed sci-fi text readouts
 
       animationId = requestAnimationFrame(draw)
     }
