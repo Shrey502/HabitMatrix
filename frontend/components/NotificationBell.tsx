@@ -134,7 +134,7 @@ export default function NotificationBell() {
                setActivePopup(task);
                setRescheduleTime(task.time);
                if (permission === 'granted') {
-                 new Notification('Habit Tracker Reminder', {
+                 new Notification('HabitMatrix Reminder', {
                    body: `Time for: ${task.title} in ${remindMins} minutes!`,
                    icon: '/favicon.ico',
                  });

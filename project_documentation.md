@@ -1,4 +1,4 @@
-# ThinkTank: Advanced Productivity & Telemetry Architecture
+# HabitMatrix: Advanced Productivity & Telemetry Architecture
 **Comprehensive System Documentation, Theoretical Framework, & Module Mechanics**
 
 *A technical and psychological breakdown for organizational and architectural presentation.*
@@ -8,9 +8,9 @@
 ## 1. Executive Summary
 Traditional productivity tools and habit trackers suffer from a fatal flaw: they are entirely passive. They rely on the user's finite supply of willpower and motivation to function. When willpower depletes, the system is abandoned. 
 
-**ThinkTank** was engineered as an active, high-friction **biometric telemetry system** designed to solve this problem. It does not just track tasks; it actively manufactures motivation through immersive, gamified aesthetic environments, enforces rigid mathematical time-boxing to eliminate procrastination, and logs biometric data (Mood/Energy) to correlate physical execution with internal psychological states. 
+**HabitMatrix** was engineered as an active, high-friction **biometric telemetry system** designed to solve this problem. It does not just track tasks; it actively manufactures motivation through immersive, gamified aesthetic environments, enforces rigid mathematical time-boxing to eliminate procrastination, and logs biometric data (Mood/Energy) to correlate physical execution with internal psychological states. 
 
-The purpose of ThinkTank is to transform the abstract concept of "getting things done" into a concrete, measurable, and highly engaging operational protocol.
+The purpose of HabitMatrix is to transform the abstract concept of "getting things done" into a concrete, measurable, and highly engaging operational protocol.
 
 ---
 
@@ -22,7 +22,7 @@ Before dissecting the individual modules, it is critical to understand the three
    The UI is intentionally designed to simulate a futuristic command center. Instead of checking a generic box on a white screen, the user engages with glowing neon borders, pulsing micro-animations, and dynamic data visualizations. This "high-friction" approach triggers dopamine responses upon interaction, turning task completion from a chore into a rewarding mission objective.
 
 2. **Algorithmic Time Allocation (Parkinson's Law):** 
-   *Parkinson’s Law* states that "work expands to fill the time available for its completion." ThinkTank combats this by forcing users to assign strict mathematical durations to tasks and confining them into immutable 24-hour vertical timelines. An unallocated task is an uncompleted task. 
+   *Parkinson’s Law* states that "work expands to fill the time available for its completion." HabitMatrix combats this by forcing users to assign strict mathematical durations to tasks and confining them into immutable 24-hour vertical timelines. An unallocated task is an uncompleted task. 
 
 3. **Biometric Telemetry (Data Correlation):** 
    You cannot improve what you do not measure. By capturing qualitative human metrics (mood, energy, reflections) and plotting them directly alongside quantitative operational metrics (tasks completed, hours focused), the system acts as a telemetry engine. It reveals hidden correlations, answering the vital question: *"Under what exact biological and environmental parameters do I produce my highest output?"*
@@ -84,11 +84,11 @@ The Yearly Grid is the ultimate feedback loop. It takes the operational data (Ta
 * **Heatmap Matrix:** Inspired by GitHub's contribution graph, it generates a 365-day SVG/CSS matrix. Each day is represented by a dot that dynamically alters its size, color, and CSS `box-shadow` glow intensity based on the volume of execution recorded on that date.
 * **Momentum Visualization:** Utilizes the `Recharts` library to render a dynamic Area Chart, tracking the month-over-month growth or decline in total output.
 * **Drill-Down Data Joins:** Clicking on any historical glowing dot triggers an animated Framer Motion modal. The frontend queries the backend for all tasks completed on that specific `date`, and simultaneously queries the `Captain's Log` database for that exact same `date`. 
-* **The Result:** The user is presented with a side-by-side comparison of exactly what they achieved, and exactly how they felt while achieving it. This is the core purpose of ThinkTank—optimizing the human operating system.
+* **The Result:** The user is presented with a side-by-side comparison of exactly what they achieved, and exactly how they felt while achieving it. This is the core purpose of HabitMatrix—optimizing the human operating system.
 
 ---
 
 ## 4. Conclusion & Future Extensibility
-ThinkTank is architected for infinite horizontal scaling. Because of the decoupled FastAPI and Next.js architecture, alongside the schema-less nature of MongoDB, adding new biometric inputs (e.g., pulling data from an Apple Watch or Oura Ring API) or new operational modules (e.g., Financial tracking) can be done without refactoring the core execution matrix. 
+HabitMatrix is architected for infinite horizontal scaling. Because of the decoupled FastAPI and Next.js architecture, alongside the schema-less nature of MongoDB, adding new biometric inputs (e.g., pulling data from an Apple Watch or Oura Ring API) or new operational modules (e.g., Financial tracking) can be done without refactoring the core execution matrix. 
 
 It is not a to-do list. It is a telemetry dashboard for human potential.

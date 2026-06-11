@@ -21,7 +21,7 @@ const NAV = [
 export default function Sidebar() {
   const pathname = usePathname()
 
-  const hiddenRoutes = ['/', '/architecture', '/auth', '/onboarding']
+  const hiddenRoutes = ['/', '/workflow', '/auth', '/onboarding']
   if (hiddenRoutes.includes(pathname || '')) return null
 
   return (
@@ -33,7 +33,7 @@ export default function Sidebar() {
             <Radio size={14} className="text-blue-500" />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-slate-100 tracking-wide">HabitTracker</h2>
+            <h2 className="text-sm font-bold text-slate-100 tracking-wide">HabitMatrix</h2>
             <p className="text-[10px] text-zinc-500 tracking-wide mt-0.5">Personal Dashboard</p>
           </div>
         </div>

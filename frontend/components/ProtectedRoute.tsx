@@ -4,7 +4,7 @@ import { ReactNode, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '../lib/AuthContext';
 
-const publicRoutes = ['/', '/auth'];
+const publicRoutes = ['/', '/auth', '/workflow'];
 
 export function ProtectedRoute({ children }: { children: ReactNode }) {
     const { isAuthenticated, isLoading } = useAuth();

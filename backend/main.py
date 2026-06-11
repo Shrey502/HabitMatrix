@@ -11,7 +11,7 @@ async def lifespan(app: FastAPI):
     await create_indexes()
     yield
 
-app = FastAPI(title="Habit Tracker API", lifespan=lifespan)
+app = FastAPI(title="HabitMatrix API", lifespan=lifespan)
 
 allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3002")
 allowed_origins = [o.strip() for o in allowed_origins_str.split(",") if o.strip()]

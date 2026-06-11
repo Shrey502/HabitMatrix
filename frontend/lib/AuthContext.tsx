@@ -55,7 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const login = async (data: any) => {
         try {
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'}/api/auth/login`, {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
@@ -76,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const register = async (data: any) => {
         try {
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'}/api/auth/register`, {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
@@ -100,7 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem('refresh_token');
         setUser(null);
         if (typeof window !== 'undefined') {
-            window.location.href = '/auth';
+            window.location.href = '/';
         }
     };
 

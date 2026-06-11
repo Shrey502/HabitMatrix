@@ -182,11 +182,76 @@ async def get_telemetry(user_id: str = Depends(get_current_user)):
             {"category": "Development", "variance_mins": 15, "status": "Tight Focus", "message": "Incredibly consistent. Development deviates by only ±15 mins."}
         ]
 
-    # 3. Correlations (Simulated matrix based on common patterns if lack of big data)
-    correlations = [
-        {"metric": "Health ➔ Development", "value": 0.82, "message": "Pearson Coef: 0.82. Completing Health tasks boosts Dev output."},
-        {"metric": "Sleep Variance ➔ Routine", "value": -0.65, "message": "Pearson Coef: -0.65. Waking up inconsistently tanks Routine completion."}
-    ]
+    # 3. Real Biometric Correlations (Pearson)
+    correlations = []
+    
+    start_30 = today - timedelta(days=30)
+    journals = await db.journals.find({"user_id": user_id, "date": {"$gte": str(start_30)}}).to_list(30)
+    
+    if len(journals) >= 3:
+        tasks_pipeline = [
+            {"$match": {"user_id": user_id, "date": {"$gte": str(start_30)}, "status": "Done"}},
+            {"$group": {
+                "_id": "$date", 
+                "total_duration": {"$sum": "$duration"},
+                "dev_duration": {"$sum": {"$cond": [{"$eq": ["$category", "Development"]}, "$duration", 0]}}
+            }}
+        ]
+        tasks_daily = await db.tasks.aggregate(tasks_pipeline).to_list(30)
+        task_map = { t["_id"]: t for t in tasks_daily }
+        
+        energy_arr = []
+        mood_arr = []
+        dev_dur_arr = []
+        total_dur_arr = []
+        
+        for j in journals:
+            date_str = j["date"]
+            energy = j.get("energy_score", 0)
+            mood = j.get("mood_score", 0)
+            
+            t_data = task_map.get(date_str, {"total_duration": 0, "dev_duration": 0})
+            dev_dur = t_data.get("dev_duration") or 0
+            total_dur = t_data.get("total_duration") or 0
+            
+            energy_arr.append(energy)
+            mood_arr.append(mood)
+            dev_dur_arr.append(dev_dur)
+            total_dur_arr.append(total_dur)
+            
+        def pearson(x, y):
+            n = len(x)
+            if n < 2: return 0.0
+            mean_x = sum(x) / n
+            mean_y = sum(y) / n
+            num = sum((xi - mean_x) * (yi - mean_y) for xi, yi in zip(x, y))
+            den_x = sum((xi - mean_x)**2 for xi in x)
+            den_y = sum((yi - mean_y)**2 for yi in y)
+            if den_x == 0 or den_y == 0: return 0.0
+            return num / math.sqrt(den_x * den_y)
+            
+        energy_dev_corr = pearson(energy_arr, dev_dur_arr)
+        mood_total_corr = pearson(mood_arr, total_dur_arr)
+        
+        if energy_dev_corr > 0.5:
+            msg = f"Strong positive correlation ({energy_dev_corr:.2f}). Your Development output heavily relies on high Energy scores."
+        elif energy_dev_corr < -0.5:
+            msg = f"Negative correlation ({energy_dev_corr:.2f}). You're forcing Development work on low energy days. Risk of burnout."
+        else:
+            msg = f"Weak correlation ({energy_dev_corr:.2f}). Your Development output is relatively independent of your Energy score."
+            
+        correlations.append({"metric": "Energy ➔ Development", "value": round(energy_dev_corr, 2), "message": msg})
+
+        if mood_total_corr > 0.5:
+            msg = f"Strong positive correlation ({mood_total_corr:.2f}). Better Mood scores drive higher overall task completion."
+        else:
+            msg = f"Correlation ({mood_total_corr:.2f}). Your overall task volume and Mood score have minimal statistical dependence."
+            
+        correlations.append({"metric": "Mood ➔ Total Output", "value": round(mood_total_corr, 2), "message": msg})
+    else:
+        correlations = [
+            {"metric": "Insufficient Data", "value": 0.0, "message": "Log your mood and energy for at least 3 days to unlock biometric correlations."}
+        ]
 
     return {
         "burnout": burnout,

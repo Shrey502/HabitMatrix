@@ -27,6 +27,7 @@ class RefreshRequest(BaseModel):
 
 @router.post("/auth/register")
 async def register(user: UserRegister):
+    user.email = user.email.lower()
     existing = await db.users.find_one({"email": user.email})
     if existing:
         raise HTTPException(status_code=400, detail="User already exists")
@@ -55,6 +56,7 @@ async def register(user: UserRegister):
 
 @router.post("/auth/login")
 async def login(user: UserLogin):
+    user.email = user.email.lower()
     existing = await db.users.find_one({"email": user.email})
     if not existing or not verify_password(user.password, existing["password"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
