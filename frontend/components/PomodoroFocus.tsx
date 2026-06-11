@@ -4,6 +4,7 @@ import { Clock, Play, Pause, Square, ChevronDown, CheckCircle2 } from 'lucide-re
 import { motion, AnimatePresence } from 'framer-motion'
 import { BADGE_COLORS } from '@/lib/constants'
 import { getAPIUrl } from '@/components/dateUtils'
+import { apiFetch } from "@/lib/api";
 
 export default function PomodoroFocus({ 
   availableTasks, 
@@ -104,13 +105,13 @@ export default function PomodoroFocus({
   const toggleTimer = async () => {
     if (!isActive && selectedTask && selectedTask.status !== 'In Progress') {
       try {
-        await fetch(`${getAPIUrl()}/api/tasks/${selectedTask._id}/status`, {
+        await apiFetch(`${getAPIUrl()}/api/tasks/${selectedTask._id}/status`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'In Progress' })
         })
         // Force reload to update dashboard
-        setTimeout(() => window.location.reload(), 500)
+        setTimeout(() => window.dispatchEvent(new Event('refresh_tasks')), 500)
       } catch (e) {
         console.error(e)
       }
@@ -120,7 +121,7 @@ export default function PomodoroFocus({
 
   const updateTaskStatus = async (status: string) => {
     try {
-      await fetch(`${getAPIUrl()}/api/tasks/${taskId}/status`, {
+      await apiFetch(`${getAPIUrl()}/api/tasks/${taskId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status })
@@ -134,7 +135,7 @@ export default function PomodoroFocus({
     setTimerFinishState('none')
     setTaskId(null)
     localStorage.removeItem('pomodoro_state')
-    setTimeout(() => window.location.reload(), 300)
+    setTimeout(() => window.dispatchEvent(new Event('refresh_tasks')), 300)
   }
 
   const handleComplete = async (isDone: boolean) => {
@@ -154,7 +155,7 @@ export default function PomodoroFocus({
   const handleRescheduleSubmit = async () => {
     if (!newRescheduleTime) return;
     try {
-      await fetch(`${getAPIUrl()}/api/tasks/${taskId}`, {
+      await apiFetch(`${getAPIUrl()}/api/tasks/${taskId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...selectedTask, time: newRescheduleTime, status: 'To-Do' })

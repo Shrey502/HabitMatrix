@@ -1,3 +1,5 @@
+from auth_utils import get_current_user
+from fastapi import Depends
 from fastapi import APIRouter, HTTPException
 from models import RoutineBase, RoutineDB
 from database import db
@@ -6,33 +8,34 @@ from bson import ObjectId
 router = APIRouter()
 
 @router.get("/routines", response_model=list[RoutineDB])
-async def get_routines():
+async def get_routines(user_id: str = Depends(get_current_user)):
     routines = await db.routines.find().to_list(100)
     return routines
 
 @router.post("/routines", response_model=RoutineDB)
-async def create_routine(routine: RoutineBase):
+async def create_routine(routine: RoutineBase, user_id: str = Depends(get_current_user)):
     routine_dict = routine.model_dump()
+    routine_dict["user_id"] = user_id
     result = await db.routines.insert_one(routine_dict)
-    created = await db.routines.find_one({"_id": result.inserted_id})
+    created = await db.routines.find_one({"user_id": user_id, "_id": result.inserted_id})
     return created
 
 @router.delete("/routines/{routine_id}")
-async def delete_routine(routine_id: str):
-    await db.routines.delete_one({"_id": ObjectId(routine_id)})
+async def delete_routine(routine_id: str, user_id: str = Depends(get_current_user)):
+    await db.routines.delete_one({"user_id": user_id, "_id": ObjectId(routine_id)})
     return {"message": "Routine deleted"}
 
 from typing import Optional
 
 @router.put("/routines/{routine_id}", response_model=RoutineDB)
-async def update_routine(routine_id: str, routine: RoutineBase, update_today: bool = False, date: Optional[str] = None):
+async def update_routine(routine_id: str, routine: RoutineBase, update_today: bool = False, date: Optional[str] = None, user_id: str = Depends(get_current_user)):
     update_data = routine.model_dump(exclude_unset=True)
-    await db.routines.update_one({"_id": ObjectId(routine_id)}, {"$set": update_data})
-    updated = await db.routines.find_one({"_id": ObjectId(routine_id)})
+    await db.routines.update_one({"user_id": user_id, "_id": ObjectId(routine_id)}, {"$set": update_data})
+    updated = await db.routines.find_one({"user_id": user_id, "_id": ObjectId(routine_id)})
     
     if update_today and date:
         # Delete uncompleted tasks deployed by this routine today
-        await db.tasks.delete_many({
+        await db.tasks.delete_many({"user_id": user_id, 
             "routine_id": routine_id,
             "date": date,
             "status": {"$ne": "Done"}
@@ -57,8 +60,8 @@ async def update_routine(routine_id: str, routine: RoutineBase, update_today: bo
     return updated
 
 @router.post("/routines/{routine_id}/deploy")
-async def deploy_routine(routine_id: str, date: str):
-    routine = await db.routines.find_one({"_id": ObjectId(routine_id)})
+async def deploy_routine(routine_id: str, date: str, user_id: str = Depends(get_current_user)):
+    routine = await db.routines.find_one({"user_id": user_id, "_id": ObjectId(routine_id)})
     if not routine:
         raise HTTPException(status_code=404, detail="Routine not found")
     

@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { Clock, GripVertical, AlertTriangle, Settings2, X, GripHorizontal, ZoomIn, ZoomOut, Magnet, Copy, Trash2, SplitSquareHorizontal, Scissors } from 'lucide-react'
 import { getLocalISODate, getAPIUrl } from '@/components/dateUtils'
 import { motion, AnimatePresence } from 'framer-motion'
+import { apiFetch } from "@/lib/api";
 
 const API = getAPIUrl()
 
@@ -100,8 +101,8 @@ export default function SchedulePage() {
     const d1 = date;
     const d2 = getNextDay(date);
     const [res1, res2] = await Promise.all([
-       fetch(`${API}/api/tasks/date/${d1}`),
-       fetch(`${API}/api/tasks/date/${d2}`)
+       apiFetch(`${API}/api/tasks/date/${d1}`),
+       apiFetch(`${API}/api/tasks/date/${d2}`)
     ]);
     const tasks1 = res1.ok ? await res1.json() : [];
     const tasks2 = res2.ok ? await res2.json() : [];
@@ -168,7 +169,7 @@ export default function SchedulePage() {
 
   // --- API Sync Helpers ---
   const syncTaskBackend = async (taskId: string, updates: any) => {
-    await fetch(`${API}/api/tasks/${taskId}`, {
+    await apiFetch(`${API}/api/tasks/${taskId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates)
@@ -389,7 +390,7 @@ export default function SchedulePage() {
     const { _id, ...newT } = t
     newT.duration = t.duration - halfDur
     newT.time = minsToTimeStr(secondStartMins)
-    await fetch(`${API}/api/tasks`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newT) })
+    await apiFetch(`${API}/api/tasks`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newT) })
     fetchTasks()
   }
 
@@ -398,7 +399,7 @@ export default function SchedulePage() {
     if (!t) return
     const { _id, ...newT } = t
     newT.time = null // send to unallocated
-    await fetch(`${API}/api/tasks`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newT) })
+    await apiFetch(`${API}/api/tasks`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newT) })
     fetchTasks()
   }
 
@@ -434,13 +435,13 @@ export default function SchedulePage() {
     const { _id, ...newT } = t;
     newT.duration = secondDur;
     newT.time = newTimeStr;
-    const res = await fetch(`${API}/api/tasks`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newT) });
+    const res = await apiFetch(`${API}/api/tasks`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newT) });
     const createdTask = await res.json();
     setTasks(prev => [...prev, createdTask]);
 
     // 3. Permanent Routine Update
     if (cutTaskState.isPermanent && t.routine_id) {
-       const routinesRes = await fetch(`${API}/api/routines`);
+       const routinesRes = await apiFetch(`${API}/api/routines`);
        const routines = await routinesRes.json();
        const routine = routines.find((r: any) => r._id === t.routine_id);
        if (routine) {
@@ -449,7 +450,7 @@ export default function SchedulePage() {
              const originalTemplate = routine.tasks[taskIdx];
              routine.tasks[taskIdx] = { ...originalTemplate, duration: firstDur, time: t.time };
              routine.tasks.push({ ...originalTemplate, duration: secondDur, time: newTimeStr });
-             await fetch(`${API}/api/routines/${t.routine_id}`, {
+             await apiFetch(`${API}/api/routines/${t.routine_id}`, {
                  method: 'PUT',
                  headers: { 'Content-Type': 'application/json' },
                  body: JSON.stringify({ title: routine.title, description: routine.description, tasks: routine.tasks })

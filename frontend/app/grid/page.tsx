@@ -4,6 +4,7 @@ import { TrendingUp, TrendingDown, Flame, Calendar, BarChart2, Radio, Filter, Cl
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { getLocalISODate, getAPIUrl } from '@/components/dateUtils'
 import { motion, AnimatePresence } from 'framer-motion'
+import { apiFetch } from "@/lib/api";
 
 const API = getAPIUrl()
 const YEAR = new Date().getFullYear()
@@ -56,13 +57,13 @@ export default function ContributionGrid() {
   const [loading, setLoading]     = useState(true)
 
   useEffect(() => {
-    fetch(`${API}/api/analytics/grid?year=${YEAR}`)
+    apiFetch(`${API}/api/analytics/grid?year=${YEAR}`)
       .then(r => r.ok ? r.json() : [])
       .then(d => setAllTasks(Array.isArray(d) ? d : []))
       .catch(() => setAllTasks([]))
       .finally(() => setLoading(false))
 
-    fetch(`${API}/api/journal`)
+    apiFetch(`${API}/api/journal`)
       .then(r => r.ok ? r.json() : [])
       .then(d => setAllJournals(Array.isArray(d) ? d : []))
       .catch(() => setAllJournals([]))

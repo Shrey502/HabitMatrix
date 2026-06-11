@@ -13,5 +13,5 @@ export function getLocalISODate(date: Date = new Date()): string {
  * Returns the backend API URL config.
  */
 export function getAPIUrl(): string {
-  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  return process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 }

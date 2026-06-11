@@ -1,3 +1,5 @@
+from auth_utils import get_current_user
+from fastapi import Depends
 from fastapi import APIRouter
 from datetime import datetime, timedelta, timezone
 from database import db
@@ -5,7 +7,7 @@ from database import db
 router = APIRouter()
 
 @router.get("/dashboard/metrics")
-async def get_metrics():
+async def get_metrics(user_id: str = Depends(get_current_user)):
     todo        = await db.tasks.count_documents({"status": "To-Do"})
     in_progress = await db.tasks.count_documents({"status": "In Progress"})
     done        = await db.tasks.count_documents({"status": "Done"})
@@ -20,10 +22,10 @@ async def get_metrics():
     }
 
 @router.get("/analytics/grid")
-async def get_grid_analytics(year: int):
+async def get_grid_analytics(year: int, user_id: str = Depends(get_current_user)):
     start = f"{year}-01-01"
     end = f"{year}-12-31"
-    tasks = await db.tasks.find({
+    tasks = await db.tasks.find({"user_id": user_id, 
         "status": "Done",
         "date": {"$gte": start, "$lte": end}
     }, {"title": 1, "category": 1, "date": 1, "duration": 1}).to_list(5000)
@@ -33,8 +35,8 @@ async def get_grid_analytics(year: int):
     return tasks
 
 @router.get("/analytics/streaks")
-async def get_streaks():
-    logs = await db.daily_logs.find({"total_completed": {"$gt": 0}}).sort("date", 1).to_list(1000)
+async def get_streaks(user_id: str = Depends(get_current_user)):
+    logs = await db.daily_logs.find({"user_id": user_id, "total_completed": {"$gt": 0}}).sort("date", 1).to_list(1000)
     if not logs:
         return {"current_streak": 0, "longest_streak": 0, "total_active_days": 0, "best_day_of_week": None}
 
@@ -74,10 +76,10 @@ async def get_streaks():
             "total_active_days": total_active, "best_day_of_week": best_day}
 
 @router.get("/analytics/trends")
-async def get_trends():
+async def get_trends(user_id: str = Depends(get_current_user)):
     today    = datetime.now(timezone.utc).date()
     start    = today - timedelta(days=29)
-    logs     = await db.daily_logs.find({"date": {"$gte": str(start), "$lte": str(today)}}).to_list(30)
+    logs     = await db.daily_logs.find({"user_id": user_id, "date": {"$gte": str(start), "$lte": str(today)}}).to_list(30)
     log_map  = {log["date"]: log["total_completed"] for log in logs}
     pipeline = [
         {"$match": {"date": {"$gte": str(start), "$lte": str(today)}}},
@@ -90,7 +92,7 @@ async def get_trends():
              "total":     total_map.get(str(start + timedelta(days=i)), 0)} for i in range(30)]
 
 @router.get("/analytics/category-breakdown")
-async def get_category_breakdown():
+async def get_category_breakdown(user_id: str = Depends(get_current_user)):
     pipeline = [{"$group": {"_id": "$category", "total": {"$sum": 1},
                              "done": {"$sum": {"$cond": [{"$eq": ["$status","Done"]}, 1, 0]}}}}]
     raw = await db.tasks.aggregate(pipeline).to_list(10)
@@ -102,7 +104,7 @@ async def get_category_breakdown():
 import math
 
 @router.get("/analytics/telemetry")
-async def get_telemetry():
+async def get_telemetry(user_id: str = Depends(get_current_user)):
     # 1. Burnout Risk (Bandwidth Utilization)
     # Calculate total duration of tasks per day over last 7 days
     today = datetime.now(timezone.utc).date()

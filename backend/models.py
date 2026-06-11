@@ -22,6 +22,7 @@ class Status(str, Enum):
     DONE = 'Done'
 
 class TaskBase(BaseModel):
+    user_id: Optional[str] = None
     title: str
     category: Category
     status: Status = Status.TODO
@@ -50,6 +51,7 @@ class TaskUpdate(BaseModel):
     reminder_minutes: Optional[int] = None
 
 class GoalNodeBase(BaseModel):
+    user_id: Optional[str] = None
     title: str
     description: Optional[str] = None
     status: Status = Status.TODO
@@ -76,6 +78,7 @@ class GoalNodeUpdate(BaseModel):
     connections: Optional[list[str]] = None
 
 class JournalBase(BaseModel):
+    user_id: Optional[str] = None
     date: str
     mood_score: int
     energy_score: int
@@ -89,6 +92,7 @@ class JournalDB(JournalBase):
         populate_by_name = True
 
 class RoutineBase(BaseModel):
+    user_id: Optional[str] = None
     title: str
     description: Optional[str] = None
     tasks: list[dict] = []
@@ -97,4 +101,12 @@ class RoutineDB(RoutineBase):
     id: Optional[PyObjectId] = Field(alias="_id", default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     class Config:
-        populate_by_name = True
+        populate_by_name = True
+
+class UserSettings(BaseModel):
+    theme: str = "dark"
+    notification_prefs: dict = {}
+    pomodoro_duration: int = 25
+    break_duration: int = 5
+    timezone: str = "UTC"
+

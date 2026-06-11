@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Bell, BellOff, X, Clock, CheckCircle2, AlertTriangle, Calendar } from 'lucide-react'
 import { getLocalISODate, getAPIUrl } from '@/components/dateUtils'
 import { motion, AnimatePresence } from 'framer-motion'
+import { apiFetch } from "@/lib/api";
 
 const API = getAPIUrl()
 
@@ -65,7 +66,7 @@ export default function NotificationBell() {
       const start = getLocalISODate(today);
       const end = getLocalISODate(endDay);
       
-      const data = await fetch(`${API}/api/tasks/weekly?start_date=${start}&end_date=${end}`).then(r => r.json());
+      const data = await apiFetch(`${API}/api/tasks/weekly?start_date=${start}&end_date=${end}`).then(r => r.json());
       if (Array.isArray(data)) {
         setTasks(data);
         updateUpcoming(data);
@@ -188,7 +189,7 @@ export default function NotificationBell() {
     if (!activePopup || !rescheduleTime) return;
     
     try {
-      await fetch(`${API}/api/tasks/${activePopup._id}`, {
+      await apiFetch(`${API}/api/tasks/${activePopup._id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -198,7 +199,7 @@ export default function NotificationBell() {
       
       dismissPopup();
       // Reload page to reflect task time change across app
-      window.location.reload();
+      window.dispatchEvent(new Event('refresh_tasks'));
     } catch (e) {
       console.error(e);
     }

@@ -6,6 +6,7 @@ import { getLocalISODate, getAPIUrl } from '@/components/dateUtils'
 import { BADGE_COLORS } from '@/lib/constants'
 import TaskModal from '@/components/TaskModal'
 import { motion } from 'framer-motion'
+import { apiFetch } from "@/lib/api";
 
 const API = getAPIUrl()
 
@@ -27,7 +28,7 @@ export default function KanbanBoard() {
   const fetchTasks = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API}/api/tasks/date/${today}`)
+      const res = await apiFetch(`${API}/api/tasks/date/${today}`)
       const data = await res.json()
       setTasks(Array.isArray(data) ? data : [])
     } catch (e) {
@@ -35,7 +36,11 @@ export default function KanbanBoard() {
     } finally { setLoading(false) }
   }, [today])
 
-  useEffect(() => { fetchTasks() }, [fetchTasks])
+  useEffect(() => { 
+    fetchTasks() 
+    window.addEventListener('refresh_tasks', fetchTasks)
+    return () => window.removeEventListener('refresh_tasks', fetchTasks)
+  }, [fetchTasks])
 
   // Reorder within same column + move across columns
   const onDragEnd = async (result: any) => {
@@ -84,7 +89,7 @@ export default function KanbanBoard() {
     })
 
     try {
-      const res = await fetch(`${API}/api/tasks/${draggableId}/status`, {
+      const res = await apiFetch(`${API}/api/tasks/${draggableId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })

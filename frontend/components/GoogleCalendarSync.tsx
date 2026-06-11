@@ -27,6 +27,7 @@
 import { useState, useEffect } from 'react'
 import { Calendar, RefreshCw, CheckCircle2, AlertCircle, ExternalLink, X } from 'lucide-react'
 import { getAPIUrl } from '@/components/dateUtils'
+import { apiFetch } from "@/lib/api";
 
 const API = getAPIUrl()
 // Replace with your actual Google OAuth client ID after setup
@@ -53,7 +54,7 @@ export default function GoogleCalendarSync() {
   const [showInfo, setShowInfo] = useState(false)
 
   useEffect(() => {
-    fetch(`${API}/api/calendar/status`)
+    apiFetch(`${API}/api/calendar/status`)
       .then(r => r.json())
       .then(d => {
         setStatus(d)
@@ -80,7 +81,7 @@ export default function GoogleCalendarSync() {
     setSyncing(true)
     setResult(null)
     try {
-      const res = await fetch(`${API}/api/calendar/sync`, {
+      const res = await apiFetch(`${API}/api/calendar/sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ events: DEMO_EVENTS })
@@ -89,7 +90,7 @@ export default function GoogleCalendarSync() {
       setResult(data)
       setConnected(true)
       // Refresh status
-      const s = await fetch(`${API}/api/calendar/status`).then(r => r.json())
+      const s = await apiFetch(`${API}/api/calendar/status`).then(r => r.json())
       setStatus(s)
     } catch (e) {
       console.error(e)

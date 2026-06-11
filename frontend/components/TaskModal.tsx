@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { X, Clock, Trash2 } from 'lucide-react'
 import { getLocalISODate, getAPIUrl } from '@/components/dateUtils'
+import { apiFetch } from "@/lib/api";
 
 export default function TaskModal({ onClose, defaultDate, editTask }: { onClose: () => void, defaultDate?: string, editTask?: any }) {
   const [title, setTitle] = useState(editTask?.title || '')
@@ -32,7 +33,7 @@ export default function TaskModal({ onClose, defaultDate, editTask }: { onClose:
 
       const method = isEditing ? 'PUT' : 'POST'
 
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -53,7 +54,7 @@ export default function TaskModal({ onClose, defaultDate, editTask }: { onClose:
       }
       
       onClose()
-      window.location.reload() 
+      window.dispatchEvent(new Event('refresh_tasks')) 
     } catch (error) {
       console.error("Fetch failed:", error)
       alert(`Error saving task: ${error instanceof Error ? error.message : "Is the backend running?"}`)
@@ -65,12 +66,12 @@ export default function TaskModal({ onClose, defaultDate, editTask }: { onClose:
     if (!confirm("Are you sure you want to delete this task?")) return
     
     try {
-      const res = await fetch(`${getAPIUrl()}/api/tasks/${editTask._id}`, {
+      const res = await apiFetch(`${getAPIUrl()}/api/tasks/${editTask._id}`, {
         method: 'DELETE'
       })
       if (!res.ok) throw new Error("Failed to delete")
       onClose()
-      window.location.reload()
+      window.dispatchEvent(new Event('refresh_tasks'))
     } catch (e) {
       console.error(e)
       alert("Error deleting task")

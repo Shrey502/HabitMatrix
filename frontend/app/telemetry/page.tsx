@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { Activity, Zap, TrendingDown, Target, Brain, AlertTriangle, ShieldCheck, Clock, ArrowRight } from 'lucide-react'
 import { getAPIUrl } from '@/components/dateUtils'
+import { apiFetch } from "@/lib/api";
 
 const API = getAPIUrl()
 
@@ -10,7 +11,7 @@ export default function TelemetryDashboard() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch(`${API}/api/analytics/telemetry`)
+    apiFetch(`${API}/api/analytics/telemetry`)
       .then(r => r.json())
       .then(data => {
         setTelemetry(data)

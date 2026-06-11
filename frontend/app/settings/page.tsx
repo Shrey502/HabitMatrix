@@ -1,18 +1,14 @@
 'use client'
 import { useRouter } from 'next/navigation'
 import { LogOut, Settings as SettingsIcon } from 'lucide-react'
+import { useAuth } from '../../lib/AuthContext'
 
 export default function SettingsPage() {
   const router = useRouter()
+  const { logout } = useAuth()
 
   const handleLogout = () => {
-    // Clear all local session data
-    localStorage.removeItem('token')
-    localStorage.removeItem('name')
-    localStorage.removeItem('onboarding_completed')
-    
-    // Send user back to landing page
-    router.push('/')
+    logout()
   }
 
   return (

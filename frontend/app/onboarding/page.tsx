@@ -65,23 +65,15 @@ export default function OnboardingPage() {
     if (isCalibrating) {
       const submitData = async () => {
         try {
-          const userId = localStorage.getItem('token')
-          if (!userId) {
-            router.push('/auth')
-            return
-          }
-
-          await fetch('http://localhost:8000/api/auth/onboarding', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              user_id: userId,
-              chronotype: answers['chronotype'],
-              burnout: answers['burnout'],
-              leak: answers['leak']
-            })
+          const { apiPost } = await import('../../lib/api')
+          
+          await apiPost('/api/auth/onboarding', {
+            chronotype: answers['chronotype'],
+            burnout: answers['burnout'],
+            leak: answers['leak']
           })
 
+          // In AuthContext, checkAuth is called on mount, but we can just set this for fallback
           localStorage.setItem('onboarding_completed', 'true')
           
           setTimeout(() => {

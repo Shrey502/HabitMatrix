@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { BookOpen, Sparkles, Brain, Flame, Activity, CheckCircle2, AlertTriangle, Hash } from 'lucide-react'
 import { getLocalISODate, getAPIUrl } from '@/components/dateUtils'
+import { apiFetch } from "@/lib/api";
 
 const API = getAPIUrl()
 
@@ -15,13 +16,13 @@ export default function JournalPage() {
 
   useEffect(() => {
     // Fetch Journal Entry
-    fetch(`${API}/api/journal/${date}`)
+    apiFetch(`${API}/api/journal/${date}`)
       .then(r => r.ok ? r.json() : { mood_score: 5, energy_score: 5, reflection: '', tags: [] })
       .then(d => setJournal(d))
       .catch(() => {})
 
     // Fetch Day's Tasks for Correlation
-    fetch(`${API}/api/tasks/date/${date}`)
+    apiFetch(`${API}/api/tasks/date/${date}`)
       .then(r => r.ok ? r.json() : [])
       .then(tasks => {
         const done = tasks.filter((t: any) => t.status === 'Done').length
@@ -39,7 +40,7 @@ export default function JournalPage() {
 
   const saveJournal = async () => {
     setIsSaving(true)
-    await fetch(`${API}/api/journal`, {
+    await apiFetch(`${API}/api/journal`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...journal, date })

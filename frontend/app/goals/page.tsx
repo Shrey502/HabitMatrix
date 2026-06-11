@@ -20,6 +20,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import dagre from 'dagre'
+import { apiFetch } from "@/lib/api";
 
 const API = getAPIUrl()
 
@@ -90,7 +91,7 @@ export default function MindMapPage() {
 
   // API sync
   const updateNodeAPI = async (id: string, updates: any) => {
-    await fetch(`${API}/api/goals/${id}`, {
+    await apiFetch(`${API}/api/goals/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates)
@@ -98,7 +99,7 @@ export default function MindMapPage() {
   }
 
   const onDeleteNode = useCallback(async (id: string) => {
-    await fetch(`${API}/api/goals/${id}`, { method: 'DELETE' })
+    await apiFetch(`${API}/api/goals/${id}`, { method: 'DELETE' })
     setNodes((nds) => nds.filter((n) => n.id !== id))
     setEdges((eds) => eds.filter((e) => e.source !== id && e.target !== id))
   }, [setNodes, setEdges])
@@ -108,7 +109,7 @@ export default function MindMapPage() {
   }, [])
 
   useEffect(() => {
-    fetch(`${API}/api/goals`)
+    apiFetch(`${API}/api/goals`)
       .then(r => r.ok ? r.json() : [])
       .then(d => {
         const initialNodes: Node[] = d.map((n: any) => ({
@@ -148,7 +149,7 @@ export default function MindMapPage() {
     setEdges((eds) => addEdge({ ...params, animated: true, style: { stroke: '#a855f7', strokeWidth: 2 } }, eds))
     const sourceNode = nodes.find(n => n.id === params.source)
     if (sourceNode && params.source && params.target) {
-      const resp = await fetch(`${API}/api/goals`)
+      const resp = await apiFetch(`${API}/api/goals`)
       const d = await resp.json()
       const dbNode = d.find((n: any) => n._id === params.source)
       if (dbNode) {
@@ -165,7 +166,7 @@ export default function MindMapPage() {
       const { source, target } = edge
       const sourceNode = nodes.find(n => n.id === source)
       if (sourceNode) {
-        const resp = await fetch(`${API}/api/goals`)
+        const resp = await apiFetch(`${API}/api/goals`)
         const d = await resp.json()
         const dbNode = d.find((n: any) => n._id === source)
         if (dbNode && dbNode.connections) {
@@ -188,7 +189,7 @@ export default function MindMapPage() {
       y: 100 + Math.random() * 50,
       connections: []
     }
-    const res = await fetch(`${API}/api/goals`, {
+    const res = await apiFetch(`${API}/api/goals`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newNodeData)

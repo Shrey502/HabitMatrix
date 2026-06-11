@@ -14,3 +14,10 @@ client = AsyncIOMotorClient(
 )
 
 db = client["habit-tracker"]
+
+async def create_indexes():
+    await db.tasks.create_index([("user_id", 1), ("date", 1)])
+    await db.journals.create_index("user_id")
+    await db.goals.create_index("user_id")
+    await db.routines.create_index("user_id")
+    await db.notifications.create_index("user_id")

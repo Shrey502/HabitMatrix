@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { CheckCircle2, Circle, Clock, ChevronLeft, ChevronRight, Bell, Radio, Calendar } from 'lucide-react'
 import { getLocalISODate, getAPIUrl } from '@/components/dateUtils'
+import { apiFetch } from "@/lib/api";
 
 const API = getAPIUrl()
 
@@ -66,8 +67,8 @@ export default function WeeklyBoard() {
     setLoading(true)
     try {
       const [t, s] = await Promise.all([
-        fetch(`${API}/api/tasks/weekly?start_date=${startDate}&end_date=${endDate}`).then(r => r.json()),
-        fetch(`${API}/api/tasks/weekly-summary?start_date=${startDate}&end_date=${endDate}`).then(r => r.json()),
+        apiFetch(`${API}/api/tasks/weekly?start_date=${startDate}&end_date=${endDate}`).then(r => r.json()),
+        apiFetch(`${API}/api/tasks/weekly-summary?start_date=${startDate}&end_date=${endDate}`).then(r => r.json()),
       ])
       setTasks(Array.isArray(t) ? t : [])
       setSummary(s ?? {})
@@ -81,7 +82,7 @@ export default function WeeklyBoard() {
 
   const cycleStatus = async (id: string, current: string) => {
     const next = current === 'To-Do' ? 'In Progress' : current === 'In Progress' ? 'Done' : 'To-Do'
-    await fetch(`${API}/api/tasks/${id}/status`, {
+    await apiFetch(`${API}/api/tasks/${id}/status`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: next })
     })
@@ -103,7 +104,7 @@ export default function WeeklyBoard() {
     if (!notifTask || !notifTime) return
     const task = tasks.find(t => t._id === notifTask)
     if (!task) return
-    await fetch(`${API}/api/notifications/schedule`, {
+    await apiFetch(`${API}/api/notifications/schedule`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ task_id: notifTask, title: task.title, remind_at: new Date(notifTime).toISOString() })
     })

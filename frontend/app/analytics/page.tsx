@@ -9,6 +9,8 @@ import {
 import TaskModal from '@/components/TaskModal'
 import NotificationBell from '../../components/NotificationBell'
 import { getAPIUrl } from '@/components/dateUtils'
+import { apiFetch } from '../../lib/api'
+import { useAuth } from '@/lib/AuthContext'
 
 const API = getAPIUrl()
 
@@ -70,6 +72,7 @@ function ChartTooltip({ active, payload, label }: any) {
 }
 
 export default function Dashboard() {
+  const { user } = useAuth()
   const [metrics, setMetrics] = useState<{
     kpi: { todo: number; in_progress: number; done: number }
     categories: { name: string; value: number }[]
@@ -91,15 +94,15 @@ export default function Dashboard() {
   const fetchAll = useCallback(async () => {
     try {
       const [m, t, tr, b] = await Promise.all([
-        fetch(`${API}/api/dashboard/metrics`).then(r => r.json()),
-        fetch(`${API}/api/tasks/today`).then(r => r.json()),
-        fetch(`${API}/api/analytics/trends`).then(r => r.json()),
-        fetch(`${API}/api/analytics/category-breakdown`).then(r => r.json()),
+        apiFetch(`/api/dashboard/metrics`).then(r => r.json()),
+        apiFetch(`/api/tasks/today`).then(r => r.json()),
+        apiFetch(`/api/analytics/trends`).then(r => r.json()),
+        apiFetch(`/api/analytics/category-breakdown`).then(r => r.json()),
       ])
-      setMetrics(m)
-      setToday(t)
-      setTrends(tr)
-      setBreakdown(b)
+      if (m.kpi) setMetrics(m)
+      if (t.tasks) setToday(t)
+      if (Array.isArray(tr)) setTrends(tr)
+      if (Array.isArray(b)) setBreakdown(b)
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
   }, [])
@@ -129,7 +132,7 @@ export default function Dashboard() {
         <div>
           <div className="flex items-center gap-3 mb-1.5">
             <Radio size={16} className="text-amber-500 animate-pulse" />
-            <h1 className="text-2xl font-bold tracking-tight text-zinc-100 font-mono uppercase">PERFORMANCE DASHBOARD</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-zinc-100 font-mono uppercase">{user ? `${user.name.split(' ')[0]}'s PERFORMANCE` : 'PERFORMANCE DASHBOARD'}</h1>
           </div>
           <p className="text-xs text-zinc-500 font-mono ml-7">
             {now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}

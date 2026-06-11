@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/api';
 import { useState, useEffect, useRef } from 'react'
 import { Plus, CheckCircle2, Circle, Clock, Calendar, Activity, ShieldCheck, Radio, Sparkles, Pencil } from 'lucide-react'
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Sector, CartesianGrid } from 'recharts'
@@ -10,10 +11,12 @@ import { getLocalISODate, getAPIUrl } from '@/components/dateUtils'
 
 import { COLORS, BADGE_COLORS } from '@/lib/constants'
 import { getTaskTimeStatus, findFocusTask, getFocusQuote } from '@/lib/taskUtils'
+import { useAuth } from '@/lib/AuthContext'
 
 const CustomPie = Pie as any;
 
 export default function Dashboard() {
+  const { user } = useAuth()
   const [metrics, setMetrics] = useState<{ kpi: { todo: number, in_progress: number, done: number }, categories: { name: string, value: number }[] }>({ 
     kpi: { todo: 0, in_progress: 0, done: 0 }, categories: [] 
   })
@@ -96,20 +99,29 @@ export default function Dashboard() {
       }
     }
 
-    // Fetch KPI Metrics
-    fetch(`${getAPIUrl()}/api/dashboard/metrics`)
-      .then(res => res.json())
-      .then(data => setMetrics(data))
-      .catch(err => console.error("Error fetching metrics", err))
+    // Initial fetch
+    const fetchDashboardData = () => {
+      // Fetch KPI Metrics
+      apiFetch(`${getAPIUrl()}/api/dashboard/metrics`)
+        .then(res => res.json())
+        .then(data => setMetrics(data))
+        .catch(err => console.error("Error fetching metrics", err))
 
-    // Fetch All Tasks for Current Month
-    const startOfMonth = monthDates[0];
-    const endOfMonth = monthDates[monthDates.length - 1];
-    
-    fetch(`${getAPIUrl()}/api/tasks/weekly?start_date=${startOfMonth}&end_date=${endOfMonth}`)
-      .then(res => res.json())
-      .then(data => setMonthTasks(data))
-      .catch(err => console.error("Error fetching month tasks", err))
+      // Fetch All Tasks for Current Month
+      const startOfMonth = monthDates[0];
+      const endOfMonth = monthDates[monthDates.length - 1];
+      
+      apiFetch(`${getAPIUrl()}/api/tasks/weekly?start_date=${startOfMonth}&end_date=${endOfMonth}`)
+        .then(res => res.json())
+        .then(data => setMonthTasks(data))
+        .catch(err => console.error("Error fetching month tasks", err))
+    };
+
+    fetchDashboardData();
+
+    // Listen to custom refresh event
+    window.addEventListener('refresh_tasks', fetchDashboardData);
+    return () => window.removeEventListener('refresh_tasks', fetchDashboardData);
   }, [])
 
   // Calculate intensity class based on total tasks for a day
@@ -134,7 +146,7 @@ export default function Dashboard() {
     setMonthTasks(prev => prev.map(t => t._id === id ? { ...t, status: newStatus } : t))
     
     try {
-      const res = await fetch(`${getAPIUrl()}/api/tasks/${id}/status`, {
+      const res = await apiFetch(`${getAPIUrl()}/api/tasks/${id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })
@@ -142,7 +154,7 @@ export default function Dashboard() {
       if (!res.ok) throw new Error('Failed to update status')
       
       // Refresh KPIs after toggle
-      const metricsData = await fetch(`${getAPIUrl()}/api/dashboard/metrics`).then(res => res.json())
+      const metricsData = await apiFetch(`${getAPIUrl()}/api/dashboard/metrics`).then(res => res.json())
       setMetrics(metricsData)
     } catch (err) {
       console.error(err)
@@ -257,7 +269,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-2.5">
             <Radio size={16} className="text-amber-500 animate-pulse" />
             <h1 className="text-2xl font-bold tracking-tight font-mono text-zinc-100 uppercase">
-              Endurance Telemetry
+              {user ? `${user.name.split(' ')[0]}'s Telemetry` : "Endurance Telemetry"}
             </h1>
             <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
@@ -586,14 +598,14 @@ export default function Dashboard() {
           onClose={() => {
             setTaskModalOpen(false);
             // Refresh dashboard tasks and KPIs
-            fetch(`${getAPIUrl()}/api/dashboard/metrics`)
+            apiFetch(`${getAPIUrl()}/api/dashboard/metrics`)
               .then(res => res.json())
               .then(data => setMetrics(data))
               .catch(err => console.error(err))
 
             const startOfMonth = monthDates[0];
             const endOfMonth = monthDates[monthDates.length - 1];
-            fetch(`${getAPIUrl()}/api/tasks/weekly?start_date=${startOfMonth}&end_date=${endOfMonth}`)
+            apiFetch(`${getAPIUrl()}/api/tasks/weekly?start_date=${startOfMonth}&end_date=${endOfMonth}`)
               .then(res => res.json())
               .then(data => setMonthTasks(data))
               .catch(err => console.error(err))
@@ -607,14 +619,14 @@ export default function Dashboard() {
           onClose={() => {
             setEditingTask(null);
             // Refresh dashboard tasks and KPIs
-            fetch(`${getAPIUrl()}/api/dashboard/metrics`)
+            apiFetch(`${getAPIUrl()}/api/dashboard/metrics`)
               .then(res => res.json())
               .then(data => setMetrics(data))
               .catch(err => console.error(err))
 
             const startOfMonth = monthDates[0];
             const endOfMonth = monthDates[monthDates.length - 1];
-            fetch(`${getAPIUrl()}/api/tasks/weekly?start_date=${startOfMonth}&end_date=${endOfMonth}`)
+            apiFetch(`${getAPIUrl()}/api/tasks/weekly?start_date=${startOfMonth}&end_date=${endOfMonth}`)
               .then(res => res.json())
               .then(data => setMonthTasks(data))
               .catch(err => console.error(err))

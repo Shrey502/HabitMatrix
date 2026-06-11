@@ -1,3 +1,5 @@
+from auth_utils import get_current_user
+from fastapi import Depends
 import os
 import httpx
 from fastapi import APIRouter, HTTPException
@@ -70,7 +72,7 @@ async def find_free_slot(date_str: str, duration_needed: int, skip_task_id=None)
     Returns HH:MM format.
     """
     # Fetch all tasks on this date that are timed
-    cursor = db.tasks.find({"date": date_str, "time": {"$ne": None}, "duration": {"$ne": None}})
+    cursor = db.tasks.find({"user_id": user_id, "date": date_str, "time": {"$ne": None}, "duration": {"$ne": None}})
     tasks = await cursor.to_list(length=100)
     
     # Map tasks to (start_min, end_min) intervals
@@ -154,7 +156,7 @@ async def resolve_conflicts_for_calendar_task(date_str: str, time_str: str, dura
     rescheduled_count = 0
     
     # Query all local timed tasks on the same date
-    cursor = db.tasks.find({
+    cursor = db.tasks.find({"user_id": user_id, 
         "date": date_str,
         "time": {"$ne": None},
         "duration": {"$ne": None},
@@ -186,7 +188,7 @@ async def resolve_conflicts_for_calendar_task(date_str: str, time_str: str, dura
     return rescheduled_count
 
 @router.post("/calendar/sync")
-async def sync_calendar_events(payload: CalendarSyncPayload):
+async def sync_calendar_events(payload: CalendarSyncPayload, user_id: str = Depends(get_current_user)):
     """
     Upserts Google Calendar events as tasks.
     Uses google_event_id to avoid duplicates.
@@ -196,7 +198,7 @@ async def sync_calendar_events(payload: CalendarSyncPayload):
     skipped = 0
     rescheduled = 0
     for event in payload.events:
-        existing = await db.tasks.find_one({"google_event_id": event.google_event_id})
+        existing = await db.tasks.find_one({"user_id": user_id, "google_event_id": event.google_event_id})
         if existing:
             # Check if any timeline-relevant info has changed
             time_changed = (existing.get("time") != event.time) or (existing.get("duration") != event.duration) or (existing.get("date") != event.date) or (existing.get("title") != event.title)
@@ -248,17 +250,17 @@ async def sync_calendar_events(payload: CalendarSyncPayload):
     return {"created": created, "updated": updated, "skipped": skipped, "rescheduled": rescheduled, "total": len(payload.events)}
 
 @router.get("/calendar/status")
-async def get_calendar_status():
+async def get_calendar_status(user_id: str = Depends(get_current_user)):
     """Returns count of synced calendar tasks."""
     count = await db.tasks.count_documents({"source": "google_calendar"})
-    last  = await db.tasks.find_one({"source": "google_calendar"}, sort=[("created_at", -1)])
+    last  = await db.tasks.find_one({"user_id": user_id, "source": "google_calendar"}, sort=[("created_at", -1)])
     return {
         "synced_count": count,
         "last_sync": last["created_at"].isoformat() if last else None
     }
 
 @router.get("/auth/google/callback")
-async def google_callback(code: str):
+async def google_callback(code: str, user_id: str = Depends(get_current_user)):
     """
     Google redirects here with ?code=...
     We exchange it for tokens, fetch calendar events, sync them.
@@ -318,7 +320,7 @@ async def google_callback(code: str):
 
         created = updated = skipped = rescheduled = 0
         for ev in mapped:
-            existing = await db.tasks.find_one({"google_event_id": ev["google_event_id"]})
+            existing = await db.tasks.find_one({"user_id": user_id, "google_event_id": ev["google_event_id"]})
             if existing:
                 # Check if any timeline-relevant info has changed
                 time_changed = (existing.get("time") != ev["time"]) or (existing.get("duration") != ev["duration"]) or (existing.get("date") != ev["date"]) or (existing.get("title") != ev["title"])

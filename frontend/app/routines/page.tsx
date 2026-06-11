@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, Play, Trash2, Shield, Zap, Target, X, Edit2 } from 'lucide-react'
 import { getLocalISODate, getAPIUrl } from '@/components/dateUtils'
+import { apiFetch } from "@/lib/api";
 
 const API = getAPIUrl()
 
@@ -22,7 +23,7 @@ export default function RoutinesPage() {
 
   const fetchRoutines = async () => {
     try {
-      const res = await fetch(`${API}/api/routines`)
+      const res = await apiFetch(`${API}/api/routines`)
       if (res.ok) setRoutines(await res.json())
     } finally {
       setLoading(false)
@@ -31,7 +32,7 @@ export default function RoutinesPage() {
 
   const deployRoutine = async (id: string) => {
     const today = getLocalISODate()
-    const res = await fetch(`${API}/api/routines/${id}/deploy?date=${today}`, { method: 'POST' })
+    const res = await apiFetch(`${API}/api/routines/${id}/deploy?date=${today}`, { method: 'POST' })
     if (res.ok) {
       alert("Protocol Successfully Deployed to Today's Dashboard!")
     }
@@ -39,7 +40,7 @@ export default function RoutinesPage() {
 
   const deleteRoutine = async (id: string) => {
     if(!confirm("Delete this Armory Protocol?")) return;
-    await fetch(`${API}/api/routines/${id}`, { method: 'DELETE' })
+    await apiFetch(`${API}/api/routines/${id}`, { method: 'DELETE' })
     fetchRoutines()
   }
 
@@ -76,13 +77,13 @@ export default function RoutinesPage() {
     if (editingId) {
       const doUpdateToday = confirm("Do you want to apply these changes to today's deployed tasks as well?");
       const today = getLocalISODate();
-      await fetch(`${API}/api/routines/${editingId}?update_today=${doUpdateToday}&date=${today}`, {
+      await apiFetch(`${API}/api/routines/${editingId}?update_today=${doUpdateToday}&date=${today}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       })
     } else {
-      await fetch(`${API}/api/routines`, {
+      await apiFetch(`${API}/api/routines`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)

@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowRight, BrainCircuit, Mail, Lock, User } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { useAuth } from '../../lib/AuthContext'
 
 export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(false)
@@ -11,47 +12,34 @@ export default function AuthPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const router = useRouter()
+  const { login, register, isAuthenticated, user, isLoading } = useAuth()
 
   useEffect(() => {
-    // If already logged in, bypass auth entirely
-    const token = localStorage.getItem('token')
-    if (token) {
-      const onboarded = localStorage.getItem('onboarding_completed')
-      if (onboarded === 'true') {
+    if (!isLoading && isAuthenticated && user) {
+      if (user.onboarding_completed) {
         router.push('/dashboard')
       } else {
         router.push('/onboarding')
       }
     }
-  }, [router])
+  }, [isAuthenticated, user, isLoading, router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     try {
-      const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register'
-      const payload = isLogin ? { email, password } : { name, email, password }
-      
-      const res = await fetch(`http://localhost:8000${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.detail || 'Authentication failed')
-
-      localStorage.setItem('token', data.token)
-      localStorage.setItem('name', data.name)
-      localStorage.setItem('onboarding_completed', String(data.onboarding_completed))
-
-      if (data.onboarding_completed) {
-        router.push('/dashboard')
+      let success = false;
+      if (isLogin) {
+        success = await login({ email, password })
       } else {
-        router.push('/onboarding')
+        success = await register({ name, email, password })
+      }
+      
+      if (!success) {
+        setError('Authentication failed')
       }
     } catch (err: any) {
-      setError(err.message)
+      setError(err.message || 'An error occurred')
     }
   }
 
