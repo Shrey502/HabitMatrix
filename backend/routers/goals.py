@@ -1,37 +1,39 @@
 from auth_utils import get_current_user
-from fastapi import Depends
-from fastapi import APIRouter, HTTPException
+from fastapi import Depends, APIRouter, HTTPException
 from models import GoalNodeBase, GoalNodeDB, GoalNodeUpdate
-from database import db
-from bson import ObjectId
+from database import supabase
+import json
 
 router = APIRouter()
 
 @router.get("/goals", response_model=list[GoalNodeDB])
 async def get_goals(user_id: str = Depends(get_current_user)):
-    goals = await db.goals.find().to_list(1000)
-    return goals
+    res = supabase.table("goals").select("*").eq("user_id", user_id).execute()
+    return res.data or []
 
 @router.post("/goals", response_model=GoalNodeDB)
 async def create_goal(goal: GoalNodeBase, user_id: str = Depends(get_current_user)):
-    goal_dict = goal.model_dump()
-    goal_dict["user_id"] = user_id
-    result = await db.goals.insert_one(goal_dict)
-    created_goal = await db.goals.find_one({"user_id": user_id, "_id": result.inserted_id})
-    return created_goal
+    insert_data = goal.model_dump()
+    insert_data["user_id"] = user_id
+    # connections is a list — stored as JSONB
+    res = supabase.table("goals").insert(insert_data).execute()
+    if not res.data:
+        raise HTTPException(status_code=500, detail="Failed to create goal")
+    return res.data[0]
 
 @router.put("/goals/{goal_id}", response_model=GoalNodeDB)
 async def update_goal(goal_id: str, goal_update: GoalNodeUpdate, user_id: str = Depends(get_current_user)):
     update_data = {k: v for k, v in goal_update.model_dump().items() if v is not None}
     if update_data:
-        await db.goals.update_one({"user_id": user_id, "_id": ObjectId(goal_id)}, {"$set": update_data})
-    updated = await db.goals.find_one({"user_id": user_id, "_id": ObjectId(goal_id)})
-    if updated: return updated
-    raise HTTPException(status_code=404, detail="Goal not found")
+        supabase.table("goals").update(update_data).eq("id", goal_id).eq("user_id", user_id).execute()
+    res = supabase.table("goals").select("*").eq("id", goal_id).eq("user_id", user_id).single().execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    return res.data
 
 @router.delete("/goals/{goal_id}")
 async def delete_goal(goal_id: str, user_id: str = Depends(get_current_user)):
-    await db.goals.delete_one({"user_id": user_id, "_id": ObjectId(goal_id)})
-    # Also delete children (simple cascade)
-    await db.goals.delete_many({"user_id": user_id, "parent_id": goal_id})
+    supabase.table("goals").delete().eq("id", goal_id).eq("user_id", user_id).execute()
+    # Cascade delete children
+    supabase.table("goals").delete().eq("parent_id", goal_id).eq("user_id", user_id).execute()
     return {"message": "Goal deleted"}

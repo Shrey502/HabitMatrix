@@ -1,7 +1,8 @@
 "use client"
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { apiGet, apiPost } from './api';
+import { supabase } from './supabaseClient';
+import { apiGet } from './api';
 
 interface User {
     name: string;
@@ -15,8 +16,8 @@ interface AuthContextType {
     user: User | null;
     isAuthenticated: boolean;
     isLoading: boolean;
-    login: (data: any) => Promise<boolean>;
-    register: (data: any) => Promise<boolean>;
+    login: (data: { email: string; password: string }) => Promise<boolean>;
+    register: (data: { name: string; email: string; password: string }) => Promise<boolean>;
     logout: () => void;
 }
 
@@ -27,77 +28,92 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        checkAuth();
+        // Check existing session on mount
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session) {
+                fetchUserProfile();
+            } else {
+                setIsLoading(false);
+            }
+        });
+
+        // Listen for auth state changes (login, logout, token refresh)
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            if (session) {
+                fetchUserProfile();
+            } else {
+                setUser(null);
+                setIsLoading(false);
+            }
+        });
+
+        return () => subscription.unsubscribe();
     }, []);
 
-    const checkAuth = async () => {
-        const token = localStorage.getItem('access_token');
-        if (!token) {
-            setIsLoading(false);
-            return;
-        }
-
+    const fetchUserProfile = async () => {
         try {
             const res = await apiGet('/api/auth/me');
             if (res.ok) {
                 const userData = await res.json();
                 setUser(userData);
-            } else {
-                localStorage.removeItem('access_token');
-                localStorage.removeItem('refresh_token');
             }
         } catch (error) {
-            console.error('Auth check failed:', error);
+            console.error('Failed to fetch user profile:', error);
         } finally {
             setIsLoading(false);
         }
     };
 
-    const login = async (data: any) => {
+    const login = async (data: { email: string; password: string }) => {
         try {
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/login`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
+            const { error } = await supabase.auth.signInWithPassword({
+                email: data.email,
+                password: data.password,
             });
-            if (res.ok) {
-                const result = await res.json();
-                localStorage.setItem('access_token', result.access_token);
-                localStorage.setItem('refresh_token', result.refresh_token);
-                await checkAuth();
-                return true;
+            if (error) {
+                console.error('Login error:', error.message);
+                throw error;
             }
-            return false;
+            return true;
         } catch (e) {
             console.error(e);
-            return false;
+            throw e;
         }
     };
 
-    const register = async (data: any) => {
+    const register = async (data: { name: string; email: string; password: string }) => {
         try {
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/register`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
+            const { data: authData, error } = await supabase.auth.signUp({
+                email: data.email,
+                password: data.password,
             });
-            if (res.ok) {
-                const result = await res.json();
-                localStorage.setItem('access_token', result.access_token);
-                localStorage.setItem('refresh_token', result.refresh_token);
-                await checkAuth();
-                return true;
+            if (error) {
+                console.error('Register error:', error.message);
+                throw error;
             }
-            return false;
+
+            // Create the user profile row in the public.users table
+            if (authData.user) {
+                const { error: profileError } = await supabase.from('users').insert({
+                    user_id: authData.user.id,
+                    name: data.name,
+                    email: data.email.toLowerCase(),
+                    onboarding_completed: false,
+                });
+                if (profileError) {
+                    console.error('Profile creation error:', profileError.message);
+                    throw profileError;
+                }
+            }
+            return true;
         } catch (e) {
             console.error(e);
-            return false;
+            throw e;
         }
     };
 
-    const logout = () => {
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
+    const logout = async () => {
+        await supabase.auth.signOut();
         setUser(null);
         if (typeof window !== 'undefined') {
             window.location.href = '/';

@@ -1,60 +1,37 @@
 import { getAPIUrl } from '../components/dateUtils';
+import { supabase } from './supabaseClient';
 
-async function refreshAccessToken(): Promise<string | null> {
-    try {
-        const refreshToken = localStorage.getItem('refresh_token');
-        if (!refreshToken) return null;
-
-        const res = await fetch(`${getAPIUrl()}/api/auth/refresh`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ refresh_token: refreshToken })
-        });
-
-        if (!res.ok) {
-            return null;
-        }
-
-        const data = await res.json();
-        if (data.access_token) {
-            localStorage.setItem('access_token', data.access_token);
-            return data.access_token;
-        }
-        return null;
-    } catch (err) {
-        console.error('Error refreshing token:', err);
-        return null;
-    }
+async function getAccessToken(): Promise<string | null> {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token ?? null;
 }
 
 export async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
     const url = path.startsWith('http') ? path : `${getAPIUrl()}${path}`;
-    let token = localStorage.getItem('access_token');
-    
+    const token = await getAccessToken();
+
     const headers = new Headers(options.headers || {});
     headers.set('Content-Type', 'application/json');
     if (token) {
         headers.set('Authorization', `Bearer ${token}`);
     }
-    
+
     let res = await fetch(url, { ...options, headers });
-    
-    if (res.status === 401 && token) {
-        // Try to refresh
-        const newToken = await refreshAccessToken();
-        if (newToken) {
-            headers.set('Authorization', `Bearer ${newToken}`);
+
+    if (res.status === 401) {
+        // Try refreshing the session via Supabase
+        const { data: { session } } = await supabase.auth.refreshSession();
+        if (session?.access_token) {
+            headers.set('Authorization', `Bearer ${session.access_token}`);
             res = await fetch(url, { ...options, headers });
         } else {
-            // Refresh failed, clear tokens
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('refresh_token');
+            await supabase.auth.signOut();
             if (typeof window !== 'undefined') {
                 window.location.href = '/auth';
             }
         }
     }
-    
+
     return res;
 }
 

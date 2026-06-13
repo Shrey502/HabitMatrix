@@ -1,49 +1,49 @@
 from auth_utils import get_current_user
-from fastapi import Depends
-from fastapi import APIRouter
+from fastapi import Depends, APIRouter
 from datetime import datetime, timedelta, timezone
-from database import db
+from database import supabase
+import math
 
 router = APIRouter()
 
 @router.get("/dashboard/metrics")
 async def get_metrics(user_id: str = Depends(get_current_user)):
-    todo        = await db.tasks.count_documents({"status": "To-Do"})
-    in_progress = await db.tasks.count_documents({"status": "In Progress"})
-    done        = await db.tasks.count_documents({"status": "Done"})
+    res = supabase.table("tasks").select("status,category").eq("user_id", user_id).execute()
+    tasks = res.data or []
 
-    pipeline = [{"$group": {"_id": "$category", "count": {"$sum": 1}}}]
-    categories = await db.tasks.aggregate(pipeline).to_list(100)
-    category_data = [{"name": c["_id"], "value": c["count"]} for c in categories]
+    todo = sum(1 for t in tasks if t["status"] == "To-Do")
+    in_progress = sum(1 for t in tasks if t["status"] == "In Progress")
+    done = sum(1 for t in tasks if t["status"] == "Done")
+
+    cat_counts: dict[str, int] = {}
+    for t in tasks:
+        cat = t.get("category", "Others")
+        cat_counts[cat] = cat_counts.get(cat, 0) + 1
+    category_data = [{"name": k, "value": v} for k, v in cat_counts.items()]
 
     return {
         "kpi": {"todo": todo, "in_progress": in_progress, "done": done},
-        "categories": category_data
+        "categories": category_data,
     }
 
 @router.get("/analytics/grid")
 async def get_grid_analytics(year: int, user_id: str = Depends(get_current_user)):
     start = f"{year}-01-01"
     end = f"{year}-12-31"
-    tasks = await db.tasks.find({"user_id": user_id, 
-        "status": "Done",
-        "date": {"$gte": start, "$lte": end}
-    }, {"title": 1, "category": 1, "date": 1, "duration": 1}).to_list(5000)
-    
-    for t in tasks:
-        t["_id"] = str(t["_id"])
-    return tasks
+    res = supabase.table("tasks").select("title,category,date,duration").eq("user_id", user_id).eq("status", "Done").gte("date", start).lte("date", end).execute()
+    return res.data or []
 
 @router.get("/analytics/streaks")
 async def get_streaks(user_id: str = Depends(get_current_user)):
-    logs = await db.daily_logs.find({"user_id": user_id, "total_completed": {"$gt": 0}}).sort("date", 1).to_list(1000)
+    res = supabase.table("daily_logs").select("date,total_completed").eq("user_id", user_id).gt("total_completed", 0).order("date").execute()
+    logs = res.data or []
     if not logs:
         return {"current_streak": 0, "longest_streak": 0, "total_active_days": 0, "best_day_of_week": None}
 
-    active_dates   = sorted(set(log["date"] for log in logs))
-    total_active   = len(active_dates)
-    date_set       = set(active_dates)
-    today          = datetime.now(timezone.utc).date()
+    active_dates = sorted(set(log["date"] for log in logs))
+    total_active = len(active_dates)
+    date_set = set(active_dates)
+    today = datetime.now(timezone.utc).date()
 
     current_streak = 0
     check = today
@@ -58,9 +58,9 @@ async def get_streaks(user_id: str = Depends(get_current_user)):
 
     longest = run = 1
     for i in range(1, len(active_dates)):
-        prev = datetime.strptime(active_dates[i-1], "%Y-%m-%d").date()
-        curr = datetime.strptime(active_dates[i],   "%Y-%m-%d").date()
-        run  = run + 1 if (curr - prev).days == 1 else 1
+        prev = datetime.strptime(active_dates[i - 1], "%Y-%m-%d").date()
+        curr = datetime.strptime(active_dates[i], "%Y-%m-%d").date()
+        run = run + 1 if (curr - prev).days == 1 else 1
         longest = max(longest, run)
 
     day_totals: dict[str, int] = {}
@@ -77,56 +77,74 @@ async def get_streaks(user_id: str = Depends(get_current_user)):
 
 @router.get("/analytics/trends")
 async def get_trends(user_id: str = Depends(get_current_user)):
-    today    = datetime.now(timezone.utc).date()
-    start    = today - timedelta(days=29)
-    logs     = await db.daily_logs.find({"user_id": user_id, "date": {"$gte": str(start), "$lte": str(today)}}).to_list(30)
-    log_map  = {log["date"]: log["total_completed"] for log in logs}
-    pipeline = [
-        {"$match": {"date": {"$gte": str(start), "$lte": str(today)}}},
-        {"$group": {"_id": "$date", "total": {"$sum": 1}}}
+    today = datetime.now(timezone.utc).date()
+    start = today - timedelta(days=29)
+
+    logs_res = supabase.table("daily_logs").select("date,total_completed").eq("user_id", user_id).gte("date", str(start)).lte("date", str(today)).execute()
+    log_map = {log["date"]: log["total_completed"] for log in (logs_res.data or [])}
+
+    tasks_res = supabase.table("tasks").select("date").eq("user_id", user_id).gte("date", str(start)).lte("date", str(today)).execute()
+    total_map: dict[str, int] = {}
+    for t in (tasks_res.data or []):
+        d = t["date"]
+        total_map[d] = total_map.get(d, 0) + 1
+
+    return [
+        {
+            "date": str(start + timedelta(days=i)),
+            "completed": log_map.get(str(start + timedelta(days=i)), 0),
+            "total": total_map.get(str(start + timedelta(days=i)), 0),
+        }
+        for i in range(30)
     ]
-    totals_raw = await db.tasks.aggregate(pipeline).to_list(30)
-    total_map  = {d["_id"]: d["total"] for d in totals_raw}
-    return [{"date": str(start + timedelta(days=i)),
-             "completed": log_map.get(str(start + timedelta(days=i)), 0),
-             "total":     total_map.get(str(start + timedelta(days=i)), 0)} for i in range(30)]
 
 @router.get("/analytics/category-breakdown")
 async def get_category_breakdown(user_id: str = Depends(get_current_user)):
-    pipeline = [{"$group": {"_id": "$category", "total": {"$sum": 1},
-                             "done": {"$sum": {"$cond": [{"$eq": ["$status","Done"]}, 1, 0]}}}}]
-    raw = await db.tasks.aggregate(pipeline).to_list(10)
-    result = [{"category": d["_id"], "total": d["total"], "done": d["done"],
-               "rate": round((d["done"]/d["total"])*100, 1) if d["total"] else 0.0} for d in raw]
+    res = supabase.table("tasks").select("category,status").eq("user_id", user_id).execute()
+    tasks = res.data or []
+
+    breakdown: dict[str, dict] = {}
+    for t in tasks:
+        cat = t.get("category", "Others")
+        if cat not in breakdown:
+            breakdown[cat] = {"total": 0, "done": 0}
+        breakdown[cat]["total"] += 1
+        if t["status"] == "Done":
+            breakdown[cat]["done"] += 1
+
+    result = [
+        {
+            "category": cat,
+            "total": v["total"],
+            "done": v["done"],
+            "rate": round((v["done"] / v["total"]) * 100, 1) if v["total"] else 0.0,
+        }
+        for cat, v in breakdown.items()
+    ]
     result.sort(key=lambda x: x["rate"], reverse=True)
     return result
 
-import math
-
 @router.get("/analytics/telemetry")
 async def get_telemetry(user_id: str = Depends(get_current_user)):
-    # 1. Burnout Risk (Bandwidth Utilization)
-    # Calculate total duration of tasks per day over last 7 days
     today = datetime.now(timezone.utc).date()
     start = today - timedelta(days=7)
-    
-    pipeline = [
-        {"$match": {"date": {"$gte": str(start), "$lte": str(today)}, "status": "Done"}},
-        {"$group": {"_id": "$date", "total_mins": {"$sum": "$duration"}}}
-    ]
-    daily_durations = await db.tasks.aggregate(pipeline).to_list(10)
-    
+
+    # 1. Burnout Risk
+    done_res = supabase.table("tasks").select("date,duration").eq("user_id", user_id).eq("status", "Done").gte("date", str(start)).lte("date", str(today)).execute()
+    daily_mins: dict[str, int] = {}
+    for t in (done_res.data or []):
+        d = t["date"]
+        daily_mins[d] = daily_mins.get(d, 0) + (t.get("duration") or 0)
+
     heavy_days = 0
-    total_utilization = 0
-    for d in daily_durations:
-        mins = d.get("total_mins") or 0
-        utilization = (mins / (16 * 60)) * 100 # Assuming 16 hours waking bandwidth
-        total_utilization += utilization
-        if utilization > 75:
+    total_utilization = 0.0
+    for mins in daily_mins.values():
+        util = (mins / (16 * 60)) * 100
+        total_utilization += util
+        if util > 75:
             heavy_days += 1
-            
-    avg_util = total_utilization / max(len(daily_durations), 1)
-    
+
+    avg_util = total_utilization / max(len(daily_mins), 1)
     if heavy_days >= 4:
         burnout = {"risk_level": "High", "score": avg_util, "message": f"Statistical burnout predicted. {heavy_days} of the last 7 days were above 75% bandwidth utilization."}
     elif heavy_days >= 2:
@@ -134,22 +152,19 @@ async def get_telemetry(user_id: str = Depends(get_current_user)):
     else:
         burnout = {"risk_level": "Optimal", "score": avg_util, "message": "Bandwidth pacing is mathematically optimal."}
 
-    # 2. Time Leakage (Variance of Task Start Times)
-    # We will measure the variance in start times for routine tasks (e.g. 'Gym', 'Code')
-    pipeline_variance = [
-        {"$match": {"time": {"$ne": None}, "category": {"$in": ["Health", "Development"]}}},
-        {"$group": {"_id": "$category", "times": {"$push": "$time"}}}
-    ]
-    time_data = await db.tasks.aggregate(pipeline_variance).to_list(10)
-    
+    # 2. Time Leakage
+    time_res = supabase.table("tasks").select("category,time").in_("category", ["Health", "Development"]).not_.is_("time", "null").execute()
+    cat_times: dict[str, list] = {}
+    for t in (time_res.data or []):
+        cat = t["category"]
+        if cat not in cat_times:
+            cat_times[cat] = []
+        cat_times[cat].append(t["time"])
+
     leakage = []
-    for td in time_data:
-        cat = td["_id"]
-        times = td["times"]
+    for cat, times in cat_times.items():
         if len(times) < 2:
             continue
-            
-        # Convert times to minutes
         mins_list = []
         for t in times:
             try:
@@ -157,12 +172,10 @@ async def get_telemetry(user_id: str = Depends(get_current_user)):
                 mins_list.append(h * 60 + m)
             except:
                 pass
-                
         if len(mins_list) >= 2:
             avg_min = sum(mins_list) / len(mins_list)
-            variance = sum((m - avg_min)**2 for m in mins_list) / len(mins_list)
+            variance = sum((m - avg_min) ** 2 for m in mins_list) / len(mins_list)
             std_dev = math.sqrt(variance)
-            
             if std_dev > 90:
                 status = "High Leakage"
                 msg = f"Your {cat} schedule fluctuates by ±{int(std_dev)} mins. High friction detected."
@@ -172,90 +185,64 @@ async def get_telemetry(user_id: str = Depends(get_current_user)):
             else:
                 status = "Tight Focus"
                 msg = f"Incredibly consistent. {cat} deviates by only ±{int(std_dev)} mins."
-                
             leakage.append({"category": cat, "variance_mins": int(std_dev), "status": status, "message": msg})
-            
+
     if not leakage:
-        # Provide dummy/simulated data if the user has no history yet
         leakage = [
             {"category": "Health", "variance_mins": 110, "status": "High Leakage", "message": "Your Health schedule fluctuates by ±110 mins. High friction detected."},
-            {"category": "Development", "variance_mins": 15, "status": "Tight Focus", "message": "Incredibly consistent. Development deviates by only ±15 mins."}
+            {"category": "Development", "variance_mins": 15, "status": "Tight Focus", "message": "Incredibly consistent. Development deviates by only ±15 mins."},
         ]
 
-    # 3. Real Biometric Correlations (Pearson)
-    correlations = []
-    
+    # 3. Pearson Correlations
     start_30 = today - timedelta(days=30)
-    journals = await db.journals.find({"user_id": user_id, "date": {"$gte": str(start_30)}}).to_list(30)
-    
+    journals_res = supabase.table("journals").select("date,mood_score,energy_score").eq("user_id", user_id).gte("date", str(start_30)).execute()
+    journals = journals_res.data or []
+
+    correlations = []
     if len(journals) >= 3:
-        tasks_pipeline = [
-            {"$match": {"user_id": user_id, "date": {"$gte": str(start_30)}, "status": "Done"}},
-            {"$group": {
-                "_id": "$date", 
-                "total_duration": {"$sum": "$duration"},
-                "dev_duration": {"$sum": {"$cond": [{"$eq": ["$category", "Development"]}, "$duration", 0]}}
-            }}
-        ]
-        tasks_daily = await db.tasks.aggregate(tasks_pipeline).to_list(30)
-        task_map = { t["_id"]: t for t in tasks_daily }
-        
-        energy_arr = []
-        mood_arr = []
-        dev_dur_arr = []
-        total_dur_arr = []
-        
+        tasks_res = supabase.table("tasks").select("date,category,duration").eq("user_id", user_id).eq("status", "Done").gte("date", str(start_30)).execute()
+        task_map: dict[str, dict] = {}
+        for t in (tasks_res.data or []):
+            d = t["date"]
+            if d not in task_map:
+                task_map[d] = {"total_duration": 0, "dev_duration": 0}
+            dur = t.get("duration") or 0
+            task_map[d]["total_duration"] += dur
+            if t.get("category") == "Development":
+                task_map[d]["dev_duration"] += dur
+
+        energy_arr, mood_arr, dev_dur_arr, total_dur_arr = [], [], [], []
         for j in journals:
-            date_str = j["date"]
-            energy = j.get("energy_score", 0)
-            mood = j.get("mood_score", 0)
-            
-            t_data = task_map.get(date_str, {"total_duration": 0, "dev_duration": 0})
-            dev_dur = t_data.get("dev_duration") or 0
-            total_dur = t_data.get("total_duration") or 0
-            
-            energy_arr.append(energy)
-            mood_arr.append(mood)
-            dev_dur_arr.append(dev_dur)
-            total_dur_arr.append(total_dur)
-            
+            d = j["date"]
+            energy_arr.append(j.get("energy_score", 0))
+            mood_arr.append(j.get("mood_score", 0))
+            t_data = task_map.get(d, {"total_duration": 0, "dev_duration": 0})
+            dev_dur_arr.append(t_data["dev_duration"])
+            total_dur_arr.append(t_data["total_duration"])
+
         def pearson(x, y):
             n = len(x)
             if n < 2: return 0.0
             mean_x = sum(x) / n
             mean_y = sum(y) / n
             num = sum((xi - mean_x) * (yi - mean_y) for xi, yi in zip(x, y))
-            den_x = sum((xi - mean_x)**2 for xi in x)
-            den_y = sum((yi - mean_y)**2 for yi in y)
+            den_x = sum((xi - mean_x) ** 2 for xi in x)
+            den_y = sum((yi - mean_y) ** 2 for yi in y)
             if den_x == 0 or den_y == 0: return 0.0
             return num / math.sqrt(den_x * den_y)
-            
-        energy_dev_corr = pearson(energy_arr, dev_dur_arr)
-        mood_total_corr = pearson(mood_arr, total_dur_arr)
-        
-        if energy_dev_corr > 0.5:
-            msg = f"Strong positive correlation ({energy_dev_corr:.2f}). Your Development output heavily relies on high Energy scores."
-        elif energy_dev_corr < -0.5:
-            msg = f"Negative correlation ({energy_dev_corr:.2f}). You're forcing Development work on low energy days. Risk of burnout."
-        else:
-            msg = f"Weak correlation ({energy_dev_corr:.2f}). Your Development output is relatively independent of your Energy score."
-            
-        correlations.append({"metric": "Energy ➔ Development", "value": round(energy_dev_corr, 2), "message": msg})
 
-        if mood_total_corr > 0.5:
-            msg = f"Strong positive correlation ({mood_total_corr:.2f}). Better Mood scores drive higher overall task completion."
-        else:
-            msg = f"Correlation ({mood_total_corr:.2f}). Your overall task volume and Mood score have minimal statistical dependence."
-            
-        correlations.append({"metric": "Mood ➔ Total Output", "value": round(mood_total_corr, 2), "message": msg})
+        edc = pearson(energy_arr, dev_dur_arr)
+        mtc = pearson(mood_arr, total_dur_arr)
+
+        msg = (f"Strong positive correlation ({edc:.2f}). Your Development output heavily relies on high Energy scores." if edc > 0.5
+               else f"Negative correlation ({edc:.2f}). You're forcing Development work on low energy days. Risk of burnout." if edc < -0.5
+               else f"Weak correlation ({edc:.2f}). Your Development output is relatively independent of your Energy score.")
+        correlations.append({"metric": "Energy ➔ Development", "value": round(edc, 2), "message": msg})
+
+        msg = (f"Strong positive correlation ({mtc:.2f}). Better Mood scores drive higher overall task completion." if mtc > 0.5
+               else f"Correlation ({mtc:.2f}). Your overall task volume and Mood score have minimal statistical dependence.")
+        correlations.append({"metric": "Mood ➔ Total Output", "value": round(mtc, 2), "message": msg})
     else:
-        correlations = [
-            {"metric": "Insufficient Data", "value": 0.0, "message": "Log your mood and energy for at least 3 days to unlock biometric correlations."}
-        ]
+        correlations = [{"metric": "Insufficient Data", "value": 0.0, "message": "Log your mood and energy for at least 3 days to unlock biometric correlations."}]
 
-    return {
-        "burnout": burnout,
-        "time_leakage": leakage,
-        "correlations": correlations
-    }
-
+    return {"burnout": burnout, "time_leakage": leakage, "correlations": correlations}

@@ -1,12 +1,7 @@
-from pydantic import BaseModel, Field
-from pydantic.functional_validators import BeforeValidator
-from typing import Optional, Annotated
+from pydantic import BaseModel, computed_field
+from typing import Optional
 from enum import Enum
 from datetime import datetime, timezone
-
-# The modern Pydantic V2 way to handle MongoDB ObjectIds
-# This intercepts the BSON ObjectId and safely converts it to a string for the frontend
-PyObjectId = Annotated[str, BeforeValidator(str)]
 
 class Category(str, Enum):
     DEVELOPMENT = 'Development'
@@ -26,18 +21,20 @@ class TaskBase(BaseModel):
     title: str
     category: Category
     status: Status = Status.TODO
-    date: str # YYYY-MM-DD
-    time: Optional[str] = None # New: HH:MM (24-hour format)
-    duration: Optional[int] = None # Duration in minutes
-    reminder_minutes: Optional[int] = 15 # Minutes before task to remind
-    routine_id: Optional[str] = None # Link back to Armory routine
+    date: str  # YYYY-MM-DD
+    time: Optional[str] = None
+    duration: Optional[int] = None
+    reminder_minutes: Optional[int] = 15
+    routine_id: Optional[str] = None
 
 class TaskDB(TaskBase):
-    id: Optional[PyObjectId] = Field(alias="_id", default=None)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    id: Optional[str] = None
+    created_at: Optional[str] = None
 
-    class Config:
-        populate_by_name = True
+    @computed_field
+    @property
+    def _id(self) -> Optional[str]:
+        return self.id
 
 class TaskUpdateStatus(BaseModel):
     status: Status
@@ -62,10 +59,13 @@ class GoalNodeBase(BaseModel):
     connections: list[str] = []
 
 class GoalNodeDB(GoalNodeBase):
-    id: Optional[PyObjectId] = Field(alias="_id", default=None)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    class Config:
-        populate_by_name = True
+    id: Optional[str] = None
+    created_at: Optional[str] = None
+
+    @computed_field
+    @property
+    def _id(self) -> Optional[str]:
+        return self.id
 
 class GoalNodeUpdate(BaseModel):
     title: Optional[str] = None
@@ -86,10 +86,13 @@ class JournalBase(BaseModel):
     tags: list[str] = []
 
 class JournalDB(JournalBase):
-    id: Optional[PyObjectId] = Field(alias="_id", default=None)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    class Config:
-        populate_by_name = True
+    id: Optional[str] = None
+    created_at: Optional[str] = None
+
+    @computed_field
+    @property
+    def _id(self) -> Optional[str]:
+        return self.id
 
 class RoutineBase(BaseModel):
     user_id: Optional[str] = None
@@ -98,10 +101,13 @@ class RoutineBase(BaseModel):
     tasks: list[dict] = []
 
 class RoutineDB(RoutineBase):
-    id: Optional[PyObjectId] = Field(alias="_id", default=None)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    class Config:
-        populate_by_name = True
+    id: Optional[str] = None
+    created_at: Optional[str] = None
+
+    @computed_field
+    @property
+    def _id(self) -> Optional[str]:
+        return self.id
 
 class UserSettings(BaseModel):
     theme: str = "dark"
@@ -109,4 +115,3 @@ class UserSettings(BaseModel):
     pomodoro_duration: int = 25
     break_duration: int = 5
     timezone: str = "UTC"
-

@@ -1,23 +1,12 @@
 import os
-import certifi
 from dotenv import load_dotenv
-from motor.motor_asyncio import AsyncIOMotorClient
+from supabase import create_client, Client
 
 load_dotenv()
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
 
-# ADD tlsAllowInvalidCertificates=True to bypass strict local Windows checks
-client = AsyncIOMotorClient(
-    MONGO_URI, 
-    tlsCAFile=certifi.where(),
-    tlsAllowInvalidCertificates=True 
-)
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 
-db = client["habit-tracker"]
-
-async def create_indexes():
-    await db.tasks.create_index([("user_id", 1), ("date", 1)])
-    await db.journals.create_index("user_id")
-    await db.goals.create_index("user_id")
-    await db.routines.create_index("user_id")
-    await db.notifications.create_index("user_id")
+# Use the service role key on the backend — bypasses RLS, safe because
+# all user-scoping is enforced explicitly in each router.
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
