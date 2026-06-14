@@ -26,10 +26,10 @@ async def update_goal(goal_id: str, goal_update: GoalNodeUpdate, user_id: str = 
     update_data = {k: v for k, v in goal_update.model_dump().items() if v is not None}
     if update_data:
         supabase.table("goals").update(update_data).eq("id", goal_id).eq("user_id", user_id).execute()
-    res = supabase.table("goals").select("*").eq("id", goal_id).eq("user_id", user_id).single().execute()
+    res = supabase.table("goals").select("*").eq("id", goal_id).eq("user_id", user_id).execute()
     if not res.data:
         raise HTTPException(status_code=404, detail="Goal not found")
-    return res.data
+    return res.data[0]
 
 @router.delete("/goals/{goal_id}")
 async def delete_goal(goal_id: str, user_id: str = Depends(get_current_user)):

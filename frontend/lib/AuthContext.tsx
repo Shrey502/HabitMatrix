@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from './supabaseClient';
-import { apiGet } from './api';
+import { apiGet, apiPost } from './api';
 
 interface User {
     name: string;
@@ -83,28 +83,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const register = async (data: { name: string; email: string; password: string }) => {
         try {
-            const { data: authData, error } = await supabase.auth.signUp({
+            const response = await apiPost('/api/auth/register', data);
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || 'Registration failed');
+            }
+
+            // After successful registration, log the user in immediately
+            const { error: signInError } = await supabase.auth.signInWithPassword({
                 email: data.email,
                 password: data.password,
             });
-            if (error) {
-                console.error('Register error:', error.message);
-                throw error;
+
+            if (signInError) {
+                console.error('Login after registration error:', signInError.message);
+                throw signInError;
             }
 
-            // Create the user profile row in the public.users table
-            if (authData.user) {
-                const { error: profileError } = await supabase.from('users').insert({
-                    user_id: authData.user.id,
-                    name: data.name,
-                    email: data.email.toLowerCase(),
-                    onboarding_completed: false,
-                });
-                if (profileError) {
-                    console.error('Profile creation error:', profileError.message);
-                    throw profileError;
-                }
-            }
             return true;
         } catch (e) {
             console.error(e);
