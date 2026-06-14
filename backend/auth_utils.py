@@ -1,6 +1,4 @@
 import os
-import jwt
-import base64
 from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from database import supabase
@@ -49,9 +47,3 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
     payload = decode_supabase_token(token)
     if not payload:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
-
-    user_id = payload.get("sub")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Token missing subject")
-
-    return user_id
