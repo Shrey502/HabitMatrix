@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from './supabaseClient';
-import { apiGet } from './api';
+import { apiGet, apiPost } from './api';
 
 interface User {
     name: string;
@@ -92,17 +92,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 throw error;
             }
 
-            // Create the user profile row in the public.users table
+            // Create the user profile row in the public.users table via backend
             if (authData.user) {
-                const { error: profileError } = await supabase.from('users').insert({
-                    user_id: authData.user.id,
+                const res = await apiPost('/api/auth/profile', {
                     name: data.name,
-                    email: data.email.toLowerCase(),
-                    onboarding_completed: false,
+                    email: data.email
                 });
-                if (profileError) {
-                    console.error('Profile creation error:', profileError.message);
-                    throw profileError;
+                
+                if (!res.ok) {
+                    const errData = await res.json();
+                    console.error('Profile creation error:', errData);
+                    throw new Error(errData.detail || 'Failed to create profile');
                 }
             }
             return true;
