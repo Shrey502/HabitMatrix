@@ -10,13 +10,17 @@ signing_key = SUPABASE_JWT_SECRET
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
+import time
+
+# Simple in-memory cache to prevent network requests to Supabase on every API call.
+# Maps token string -> (user_id, expiration_timestamp)
+TOKEN_CACHE = {}
+
 def decode_supabase_token(token: str) -> dict | None:
     """Decode and verify a Supabase-issued JWT locally using HS256 (fallback)."""
+    import jwt
     try:
         header = jwt.get_unverified_header(token)
-        # If the token is signed with ES256, we can't verify locally without public keys,
-        # but we can decode claims without verification if needed. However, we should NOT trust unverified claims.
-        # This function is now a fallback for HS256.
         alg = header.get("alg", "HS256")
         
         payload = jwt.decode(
@@ -30,20 +34,33 @@ def decode_supabase_token(token: str) -> dict | None:
         print("JWT Local Decode Error:", e)
         return None
 
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
+def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
     """
     FastAPI dependency: validates the Supabase JWT and returns the user_id (UUID).
-    Supports ES256/HS256 tokens by verifying with the Supabase Auth server.
+    Uses a memory cache to avoid a 1-second network penalty on every button click.
+    Runs synchronously so FastAPI offloads it to a threadpool, unblocking the event loop!
     """
-    # 1. Primary: Verify token via Supabase Auth service (supports ES256 automatically)
+    now = time.time()
+    
+    # 1. Check ultra-fast memory cache first
+    if token in TOKEN_CACHE:
+        user_id, exp = TOKEN_CACHE[token]
+        if now < exp:
+            return user_id
+
+    # 2. Verify token via Supabase Auth service (supports ES256 automatically)
     try:
         user_resp = supabase.auth.get_user(token)
         if user_resp and user_resp.user:
+            # Cache for 5 minutes (300 seconds)
+            TOKEN_CACHE[token] = (user_resp.user.id, now + 300)
             return user_resp.user.id
     except Exception as e:
         print("Supabase SDK auth verification failed:", e)
 
-    # 2. Fallback: Local decode for HS256 tokens (useful for testing/seeding)
+    # 3. Fallback: Local decode for HS256 tokens (useful for testing/seeding)
     payload = decode_supabase_token(token)
     if not payload:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
+        
+    return payload.get("sub")
