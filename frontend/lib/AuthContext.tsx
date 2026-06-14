@@ -3,7 +3,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from './supabaseClient';
 import { apiGet, apiPost } from './api';
-import { apiGet, apiPost } from './api';
 
 interface User {
     name: string;

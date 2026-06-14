@@ -152,7 +152,7 @@ export default function SchedulePage() {
     }
     
     let blocks = []
-    let curZ = getZ(TIMELINE_START_HOUR)
+    let curZ: string | null = getZ(TIMELINE_START_HOUR)
     let startH = TIMELINE_START_HOUR
     
     for (let h = 1; h <= 24; h++) {
