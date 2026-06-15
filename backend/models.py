@@ -27,6 +27,7 @@ class TaskBase(BaseModel):
     duration: Optional[int] = None
     reminder_minutes: Optional[int] = 15
     routine_id: Optional[str] = None
+    procrastination_delta: Optional[int] = 0
 
 class TaskDB(TaskBase):
     id: Optional[str] = None
@@ -47,6 +48,7 @@ class TaskUpdate(BaseModel):
     time: Optional[str] = None
     duration: Optional[int] = None
     reminder_minutes: Optional[int] = None
+    procrastination_delta: Optional[int] = None
 
 class GoalNodeBase(BaseModel):
     user_id: Optional[str] = None

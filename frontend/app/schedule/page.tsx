@@ -95,8 +95,11 @@ export default function SchedulePage() {
     }
   }, [])
 
-  useEffect(() => { fetchTasks() }, [date])
-
+  useEffect(() => { 
+    fetchTasks()
+    window.addEventListener('refresh_tasks', fetchTasks)
+    return () => window.removeEventListener('refresh_tasks', fetchTasks)
+  }, [date])
   const fetchTasks = async () => {
     const d1 = date;
     const d2 = getNextDay(date);
@@ -174,6 +177,7 @@ export default function SchedulePage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates)
     })
+    window.dispatchEvent(new Event('refresh_tasks'))
   }
 
   // --- Time Converters ---
@@ -438,6 +442,7 @@ export default function SchedulePage() {
     const res = await apiFetch(`${API}/api/tasks`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newT) });
     const createdTask = await res.json();
     setTasks(prev => [...prev, createdTask]);
+    window.dispatchEvent(new Event('refresh_tasks'));
 
     // 3. Permanent Routine Update
     if (cutTaskState.isPermanent && t.routine_id) {

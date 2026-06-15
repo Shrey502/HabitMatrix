@@ -95,6 +95,7 @@ export default function KanbanBoard() {
         body: JSON.stringify({ status: newStatus })
       })
       if (!res.ok) throw new Error("Failed to update status")
+      window.dispatchEvent(new Event('refresh_tasks'))
     } catch {
       // Revert optimistic update on failure
       setTasks(previousTasks)

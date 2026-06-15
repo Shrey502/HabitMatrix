@@ -30,8 +30,11 @@ async def get_metrics(user_id: str = Depends(get_current_user)):
 async def get_grid_analytics(year: int, user_id: str = Depends(get_current_user)):
     start = f"{year}-01-01"
     end = f"{year}-12-31"
-    res = supabase.table("tasks").select("title,category,date,duration").eq("user_id", user_id).eq("status", "Done").gte("date", start).lte("date", end).execute()
-    return res.data or []
+    res = supabase.table("tasks").select("id,title,category,date,duration").eq("user_id", user_id).eq("status", "Done").gte("date", start).lte("date", end).execute()
+    data = res.data or []
+    for t in data:
+        t["_id"] = t.get("id")
+    return data
 
 @router.get("/analytics/streaks")
 async def get_streaks(user_id: str = Depends(get_current_user)):

@@ -78,7 +78,11 @@ export default function WeeklyBoard() {
     } finally { setLoading(false) }
   }, [startDate, endDate])
 
-  useEffect(() => { fetchWeek() }, [fetchWeek])
+  useEffect(() => { 
+    fetchWeek()
+    window.addEventListener('refresh_tasks', fetchWeek)
+    return () => window.removeEventListener('refresh_tasks', fetchWeek)
+  }, [fetchWeek])
 
   const cycleStatus = async (id: string, current: string) => {
     const next = current === 'To-Do' ? 'In Progress' : current === 'In Progress' ? 'Done' : 'To-Do'
@@ -98,6 +102,7 @@ export default function WeeklyBoard() {
       const total   = prev[d].total ?? 1
       return { ...prev, [d]: { ...prev[d], done: newDone, rate: Math.round((newDone / total) * 100) } }
     })
+    window.dispatchEvent(new Event('refresh_tasks'))
   }
 
   const scheduleNotif = async () => {

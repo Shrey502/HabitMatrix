@@ -20,6 +20,8 @@ export default function PomodoroFocus({
   const [isLoaded, setIsLoaded] = useState(false)
   const [timerFinishState, setTimerFinishState] = useState<'none' | 'ask_complete' | 'ask_reschedule' | 'ask_time'>('none')
   const [newRescheduleTime, setNewRescheduleTime] = useState('')
+  const [desyncState, setDesyncState] = useState<'none' | 'late' | 'elapsed'>('none')
+  const [minutesLate, setMinutesLate] = useState(0)
 
   const selectedTask = availableTasks.find(t => t._id === taskId)
   const currentProgress = initialTime > 0 ? ((initialTime - timeLeft) / initialTime) * 100 : 0
@@ -103,20 +105,87 @@ export default function PomodoroFocus({
   }
 
   const toggleTimer = async () => {
-    if (!isActive && selectedTask && selectedTask.status !== 'In Progress') {
-      try {
-        await apiFetch(`${getAPIUrl()}/api/tasks/${selectedTask._id}/status`, {
-          method: 'PATCH',
+    if (!isActive && selectedTask) {
+      const isFreshStart = timeLeft === initialTime;
+      
+      if (isFreshStart && selectedTask.time) {
+        const now = new Date();
+        const currentH = now.getHours();
+        const currentM = now.getMinutes();
+        const [taskH, taskM] = selectedTask.time.split(':').map(Number);
+        const currentMinutes = currentH * 60 + currentM;
+        const taskMinutes = taskH * 60 + taskM;
+        const duration = selectedTask.duration || 25;
+        
+        let diff = currentMinutes - taskMinutes;
+        
+        if (diff >= duration) {
+           setMinutesLate(diff);
+           setDesyncState('elapsed');
+           return;
+        } else if (diff > 0) {
+           setMinutesLate(diff);
+           setDesyncState('late');
+           return;
+        }
+      }
+      
+      if (selectedTask.status !== 'In Progress') {
+        await startActualTimer();
+      } else {
+        setIsActive(true);
+      }
+    } else {
+      setIsActive(false);
+    }
+  }
+
+  const startActualTimer = async (forcedTimeLeft?: number, procrastinationDelta: number = 0, maintainInitialTime: boolean = false) => {
+    try {
+      await apiFetch(`${getAPIUrl()}/api/tasks/${selectedTask?._id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'In Progress' })
+      })
+      if (procrastinationDelta > 0) {
+        await apiFetch(`${getAPIUrl()}/api/tasks/${selectedTask?._id}`, {
+          method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'In Progress' })
+          body: JSON.stringify({ ...selectedTask, procrastination_delta: procrastinationDelta })
         })
-        // Force reload to update dashboard
-        setTimeout(() => window.dispatchEvent(new Event('refresh_tasks')), 500)
-      } catch (e) {
-        console.error(e)
+      }
+      setTimeout(() => window.dispatchEvent(new Event('refresh_tasks')), 500)
+    } catch (e) {
+      console.error(e)
+    }
+    if (forcedTimeLeft !== undefined) {
+      setTimeLeft(forcedTimeLeft);
+      if (!maintainInitialTime) {
+        setInitialTime(forcedTimeLeft);
       }
     }
-    setIsActive(!isActive)
+    setIsActive(true);
+    setDesyncState('none');
+  }
+
+  const handleLateOptionA = () => {
+     startActualTimer(undefined, minutesLate);
+  }
+
+  const handleLateOptionB = () => {
+     const durationSecs = (selectedTask?.duration || 25) * 60;
+     const newTimeLeft = Math.max(0, durationSecs - minutesLate * 60);
+     startActualTimer(newTimeLeft, 0, true);
+  }
+
+  const handleElapsedYes = () => {
+     handleComplete(true);
+     setDesyncState('none');
+  }
+
+  const handleElapsedNo = () => {
+     setDesyncState('none');
+     setTimerFinishState('ask_time');
   }
 
   const updateTaskStatus = async (status: string) => {
@@ -227,6 +296,28 @@ export default function PomodoroFocus({
               </div>
             </motion.div>
           )}
+
+          {desyncState === 'late' && (
+            <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="absolute inset-0 z-[60] bg-zinc-950/95 backdrop-blur-md flex flex-col items-center justify-center p-4 text-center rounded-2xl">
+              <h3 className="text-rose-500 font-bold mb-2 font-mono text-xs">TELEMETRY DESYNC</h3>
+              <p className="text-[10px] text-zinc-300 mb-4 font-mono w-full px-2">You are {minutesLate} minutes late.</p>
+              <div className="flex flex-col gap-2 w-full max-w-[200px]">
+                <button onClick={handleLateOptionA} className="px-2 py-1.5 bg-rose-500/20 text-rose-400 border border-rose-500/50 rounded hover:bg-rose-500/30 font-mono text-[9px] leading-tight text-left">A. Start from Now<br/><span className="text-[8px] text-rose-500/70">(Log Procrastination)</span></button>
+                <button onClick={handleLateOptionB} className="px-2 py-1.5 bg-zinc-800 text-zinc-300 border border-zinc-700 rounded hover:bg-zinc-700 font-mono text-[9px] leading-tight text-left">B. Already Working<br/><span className="text-[8px] text-zinc-500">(Deduct time passed)</span></button>
+              </div>
+            </motion.div>
+          )}
+
+          {desyncState === 'elapsed' && (
+            <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="absolute inset-0 z-[60] bg-zinc-950/95 backdrop-blur-md flex flex-col items-center justify-center p-4 text-center rounded-2xl">
+              <h3 className="text-rose-500 font-bold mb-2 font-mono text-xs">TIMEBOX ELAPSED</h3>
+              <p className="text-[10px] text-zinc-300 mb-4 font-mono w-full px-2">You completely missed this scheduled window. Did you actually complete this task?</p>
+              <div className="flex gap-3">
+                <button onClick={handleElapsedYes} className="px-3 py-1.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 rounded hover:bg-emerald-500/30 font-mono text-[10px]">YES (MARK DONE)</button>
+                <button onClick={handleElapsedNo} className="px-3 py-1.5 bg-rose-500/20 text-rose-400 border border-rose-500/50 rounded hover:bg-rose-500/30 font-mono text-[10px]">NO (RESCHEDULE)</button>
+              </div>
+            </motion.div>
+          )}
         </AnimatePresence>
 
         <div className="flex justify-between items-center border-b border-zinc-900/50 pb-2 shrink-0">
@@ -266,8 +357,11 @@ export default function PomodoroFocus({
           <div className="flex-1 flex items-center gap-5 mt-3">
             <div className="bg-zinc-950/80 border border-zinc-800/80 p-3 rounded-xl flex flex-col items-center justify-center min-w-[140px] shadow-[0_0_20px_rgba(0,0,0,0.5)] z-10 backdrop-blur-md shrink-0">
               <p className={`text-3xl font-black tracking-tighter ${isActive ? 'text-amber-500 drop-shadow-[0_0_10px_rgba(251,191,36,0.6)]' : 'text-zinc-300'}`}>
-                {formatTime(timeLeft)}
+                {formatTime(initialTime - Math.max(0, timeLeft))}
               </p>
+              <span className="text-[8px] text-zinc-500 font-bold tracking-widest uppercase mt-0.5">
+                {formatTime(Math.max(0, timeLeft))} REMAINING
+              </span>
               <div className="flex gap-4 mt-2">
                 <button onClick={toggleTimer} className={`p-1.5 rounded-full transition-all ${isActive ? 'bg-amber-500/20 text-amber-500 hover:bg-amber-500/30' : 'bg-zinc-800 text-emerald-400 hover:bg-zinc-700'}`}>
                   {isActive ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" className="ml-0.5" />}
@@ -289,7 +383,7 @@ export default function PomodoroFocus({
 
               <div className="space-y-1">
                 <div className="flex justify-between text-[8px] text-zinc-400 font-bold tracking-widest">
-                  <span>PROGRESS</span>
+                  <span>COVERED {Math.floor((initialTime - timeLeft) / 60)}M / {Math.floor(initialTime / 60)}M</span>
                   <span>{Math.round(currentProgress)}%</span>
                 </div>
                 <div className="w-full h-1.5 bg-zinc-950 rounded-full overflow-hidden border border-zinc-900 shadow-inner">
