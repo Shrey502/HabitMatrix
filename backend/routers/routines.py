@@ -3,7 +3,7 @@ from fastapi import Depends, APIRouter, HTTPException
 from models import RoutineBase, RoutineDB
 from database import supabase
 from typing import Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 router = APIRouter()
 
@@ -87,3 +87,71 @@ async def deploy_routine(routine_id: str, date: str, user_id: str = Depends(get_
         supabase.table("tasks").insert(tasks_to_insert).execute()
 
     return {"message": f"Deployed {len(tasks_to_insert)} tasks to {date}"}
+
+@router.post("/routines/deploy-week")
+async def deploy_week_routines(user_id: str = Depends(get_current_user)):
+    user_res = supabase.table("users").select("settings").eq("user_id", user_id).execute()
+    settings = user_res.data[0].get("settings", {}) if user_res.data else {}
+    weekoffs = settings.get("weekoffs", [5, 6])
+    
+    start_of_week = (max(weekoffs) + 1) % 7 if weekoffs else 0
+
+    today_dt = datetime.now(timezone.utc)
+    days_since_start = (today_dt.weekday() - start_of_week) % 7
+    current_week_start_dt = today_dt - timedelta(days=days_since_start)
+    current_week_start_date = current_week_start_dt.strftime("%Y-%m-%d")
+
+    # Only deploy once per cycle
+    if settings.get("last_weekly_plan_date") == current_week_start_date:
+        return {"message": "Already planned for this week", "deployed_count": 0, "week_start": current_week_start_date}
+
+    res = supabase.table("routines").select("*").eq("user_id", user_id).eq("is_active", True).execute()
+    all_active_routines = res.data or []
+
+    # Get existing routine tasks for this 7 day period to avoid duplicates
+    end_dt = current_week_start_dt + timedelta(days=6)
+    end_date = end_dt.strftime("%Y-%m-%d")
+    existing_tasks_res = supabase.table("tasks").select("routine_id, date").eq("user_id", user_id).gte("date", current_week_start_date).lte("date", end_date).not_.is_("routine_id", "null").execute()
+    
+    existing_set = set()
+    for t in (existing_tasks_res.data or []):
+        existing_set.add(f"{t['routine_id']}_{t['date']}")
+
+    tasks_to_insert = []
+    
+    for i in range(7):
+        target_dt = current_week_start_dt + timedelta(days=i)
+        target_date = target_dt.strftime("%Y-%m-%d")
+        target_day = target_dt.weekday()
+        
+        is_weekoff = target_day in weekoffs
+        routines_for_day = [r for r in all_active_routines if r.get("days") is not None and target_day in r.get("days")]
+        
+        for routine in routines_for_day:
+            if f"{routine['id']}_{target_date}" in existing_set:
+                continue
+                
+            for task_template in routine.get("tasks", []):
+                cat = task_template.get("category", "")
+                if is_weekoff and cat.upper() in ["WORK", "OFFICE"]:
+                    continue
+                    
+                tasks_to_insert.append({
+                    "user_id": user_id,
+                    "title": task_template.get("title"),
+                    "category": cat,
+                    "status": "To-Do",
+                    "date": target_date,
+                    "duration": task_template.get("duration"),
+                    "time": task_template.get("time"),
+                    "reminder_minutes": task_template.get("reminder_minutes"),
+                    "routine_id": routine["id"],
+                })
+
+    if tasks_to_insert:
+        supabase.table("tasks").insert(tasks_to_insert).execute()
+        
+    settings["last_weekly_plan_date"] = current_week_start_date
+    supabase.table("users").update({"settings": settings}).eq("user_id", user_id).execute()
+
+    return {"message": f"Auto-deployed {len(tasks_to_insert)} tasks for the week", "deployed_count": len(tasks_to_insert), "week_start": current_week_start_date}

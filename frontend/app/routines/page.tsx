@@ -14,8 +14,19 @@ export default function RoutinesPage() {
   // New Routine Form State
   const [newTitle, setNewTitle] = useState('')
   const [newDesc, setNewDesc] = useState('')
-  const [newTasks, setNewTasks] = useState<{title: string, category: string, duration: number}[]>([])
+  const [newTasks, setNewTasks] = useState<{title: string, category: string, time?: string, endTime?: string, duration: number}[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
+
+  const calcDuration = (start: string | undefined, end: string | undefined) => {
+    if (!start || !end) return 0;
+    const [sh, sm] = start.split(':').map(Number);
+    const [eh, em] = end.split(':').map(Number);
+    let diff = (eh * 60 + em) - (sh * 60 + sm);
+    if (diff < 0) diff += 24 * 60;
+    return diff;
+  }
+  const [newDays, setNewDays] = useState<number[]>([0,1,2,3,4]) // Mon-Fri
+  const [newIsActive, setNewIsActive] = useState<boolean>(true)
 
   useEffect(() => {
     fetchRoutines()
@@ -45,7 +56,7 @@ export default function RoutinesPage() {
   }
 
   const addTaskToNewRoutine = () => {
-    setNewTasks([...newTasks, { title: '', category: 'Development', duration: 30 }])
+    setNewTasks([...newTasks, { title: '', category: 'Development', time: '09:00', endTime: '10:00', duration: 60 }])
   }
 
   const openEditModal = (routine: any) => {
@@ -53,6 +64,8 @@ export default function RoutinesPage() {
     setNewTitle(routine.title)
     setNewDesc(routine.description || '')
     setNewTasks(routine.tasks || [])
+    setNewDays(routine.days || [])
+    setNewIsActive(routine.is_active ?? true)
     setIsModalOpen(true)
   }
 
@@ -61,6 +74,8 @@ export default function RoutinesPage() {
     setNewTitle('')
     setNewDesc('')
     setNewTasks([])
+    setNewDays([0,1,2,3,4])
+    setNewIsActive(true)
     setIsModalOpen(true)
   }
 
@@ -71,7 +86,9 @@ export default function RoutinesPage() {
     const payload = {
       title: newTitle,
       description: newDesc,
-      tasks: newTasks
+      tasks: newTasks,
+      days: newDays,
+      is_active: newIsActive
     }
     
     if (editingId) {
@@ -95,6 +112,8 @@ export default function RoutinesPage() {
     setNewTitle('')
     setNewDesc('')
     setNewTasks([])
+    setNewDays([0,1,2,3,4])
+    setNewIsActive(true)
     fetchRoutines()
   }
 
@@ -122,6 +141,12 @@ export default function RoutinesPage() {
                  <button onClick={() => openEditModal(r)} className="text-zinc-500 hover:text-amber-400"><Edit2 size={14}/></button>
                  <button onClick={() => deleteRoutine(r._id)} className="text-zinc-600 hover:text-rose-400"><Trash2 size={14}/></button>
               </div>
+            </div>
+            <div className="flex items-center gap-2 mb-2">
+               <span className={`w-2 h-2 rounded-full ${r.is_active !== false ? 'bg-emerald-500' : 'bg-zinc-600'}`} />
+               <span className="text-[10px] text-zinc-400 font-mono tracking-wider">
+                 {r.is_active !== false ? 'ACTIVE' : 'PAUSED'} • {(r.days && r.days.length > 0) ? r.days.map((d: number) => ['M','T','W','T','F','S','S'][d]).join(',') : 'NO DAYS'}
+               </span>
             </div>
             <p className="text-xs text-zinc-500 mb-4 h-8">{r.description}</p>
             
@@ -173,6 +198,32 @@ export default function RoutinesPage() {
                 <input type="text" value={newDesc} onChange={e => setNewDesc(e.target.value)} placeholder="e.g. My standard 3-hour deep work block" className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs font-mono text-zinc-300 focus:border-amber-500 outline-none transition-colors" />
               </div>
 
+              <div className="flex gap-4 items-center pt-2">
+                <div className="flex-1">
+                  <label className="block text-[10px] font-mono text-zinc-500 uppercase mb-1">Repeat Days</label>
+                  <div className="flex gap-1.5">
+                    {['M','T','W','T','F','S','S'].map((day, idx) => (
+                      <button 
+                        key={idx}
+                        onClick={() => setNewDays(newDays.includes(idx) ? newDays.filter(d => d !== idx) : [...newDays, idx])}
+                        className={`w-7 h-7 rounded text-[10px] font-mono font-bold flex items-center justify-center transition-colors ${newDays.includes(idx) ? 'bg-amber-500/20 text-amber-500 border border-amber-500/50' : 'bg-zinc-900 text-zinc-500 border border-zinc-800 hover:border-zinc-700'}`}
+                      >
+                        {day}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-mono text-zinc-500 uppercase mb-1">Status</label>
+                  <button 
+                    onClick={() => setNewIsActive(!newIsActive)}
+                    className={`h-7 px-3 rounded text-[10px] font-mono font-bold flex items-center justify-center border transition-colors ${newIsActive ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50' : 'bg-zinc-900 text-zinc-500 border-zinc-800'}`}
+                  >
+                    {newIsActive ? 'ACTIVE' : 'PAUSED'}
+                  </button>
+                </div>
+              </div>
+
               <div className="mt-6 border-t border-zinc-800 pt-4">
                 <div className="flex items-center justify-between mb-3">
                   <label className="block text-[10px] font-mono text-zinc-500 uppercase">Task Manifest</label>
@@ -209,16 +260,28 @@ export default function RoutinesPage() {
                         <option>Others</option>
                       </select>
                       <input 
-                        type="number" 
-                        value={t.duration}
+                        type="time" 
+                        value={t.time || ''}
                         onChange={e => {
                           const nt = [...newTasks]
-                          nt[idx].duration = parseInt(e.target.value) || 0
+                          nt[idx].time = e.target.value
+                          nt[idx].duration = calcDuration(e.target.value, t.endTime)
                           setNewTasks(nt)
                         }}
-                        className="w-16 bg-zinc-900 border border-zinc-700 text-xs font-mono text-zinc-300 p-1 rounded outline-none"
+                        className="bg-zinc-900 border border-zinc-700 text-xs font-mono text-zinc-300 p-1 rounded outline-none"
                       />
-                      <span className="text-[10px] text-zinc-500 font-mono">min</span>
+                      <span className="text-zinc-500 font-mono text-[10px]">to</span>
+                      <input 
+                        type="time" 
+                        value={t.endTime || ''}
+                        onChange={e => {
+                          const nt = [...newTasks]
+                          nt[idx].endTime = e.target.value
+                          nt[idx].duration = calcDuration(t.time, e.target.value)
+                          setNewTasks(nt)
+                        }}
+                        className="bg-zinc-900 border border-zinc-700 text-xs font-mono text-zinc-300 p-1 rounded outline-none"
+                      />
                       <button onClick={() => setNewTasks(newTasks.filter((_, i) => i !== idx))} className="text-zinc-600 hover:text-rose-400 ml-1"><X size={12}/></button>
                     </div>
                   ))}

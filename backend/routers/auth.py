@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
+from typing import Optional
 import postgrest
 from database import supabase
 from datetime import datetime, timezone
@@ -12,6 +13,8 @@ class OnboardingData(BaseModel):
     chronotype: str
     burnout: str
     leak: str
+    weekoffs: Optional[list[int]] = None
+    routine: Optional[list[dict]] = None
 
 class UserRegister(BaseModel):
     name: str
@@ -95,12 +98,30 @@ async def create_profile(data: ProfileCreateData, user_id: str = Depends(get_cur
 
 @router.post("/auth/onboarding")
 async def complete_onboarding(data: OnboardingData, user_id: str = Depends(get_current_user)):
+    res_set = supabase.table("users").select("settings").eq("user_id", user_id).execute()
+    settings = res_set.data[0].get("settings") or UserSettings().model_dump() if res_set.data else UserSettings().model_dump()
+    if data.weekoffs is not None:
+        settings["weekoffs"] = data.weekoffs
+
     res = supabase.table("users").update({
         "onboarding_completed": True,
         "chronotype": data.chronotype,
         "burnout": data.burnout,
         "time_leak": data.leak,
+        "settings": settings
     }).eq("user_id", user_id).execute()
+
+    if data.routine and len(data.routine) > 0:
+        routine_dict = {
+            "user_id": user_id,
+            "title": "Base Routine",
+            "description": "Core protocol from initial calibration",
+            "tasks": data.routine,
+            "days": [0, 1, 2, 3, 4, 5, 6],
+            "is_active": True
+        }
+        supabase.table("routines").insert(routine_dict).execute()
+
     if not res.data:
         raise HTTPException(status_code=404, detail="User not found")
     return {"message": "Onboarding completed successfully"}

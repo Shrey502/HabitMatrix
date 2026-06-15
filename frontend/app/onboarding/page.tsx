@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowRight, ArrowLeft, Sun, Moon, Sunrise, Battery, BatteryMedium, BatteryFull, Smartphone, Gamepad2, Tv, BrainCircuit, CheckCircle2 } from 'lucide-react'
+import { ArrowRight, ArrowLeft, Sun, Moon, Sunrise, Battery, BatteryMedium, BatteryFull, Smartphone, Gamepad2, Tv, BrainCircuit, CheckCircle2, Plus, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
 const questions = [
@@ -41,14 +41,26 @@ export default function OnboardingPage() {
   const [step, setStep] = useState(0)
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [isCalibrating, setIsCalibrating] = useState(false)
+  const [weekoffs, setWeekoffs] = useState<number[]>([5, 6])
+  const [routineTasks, setRoutineTasks] = useState<{title: string, category: string, time: string, endTime: string, duration: number}[]>([])
+  const totalSteps = questions.length + 2;
   const router = useRouter()
+
+  const calcDuration = (start: string, end: string) => {
+    if (!start || !end) return 0;
+    const [sh, sm] = start.split(':').map(Number);
+    const [eh, em] = end.split(':').map(Number);
+    let diff = (eh * 60 + em) - (sh * 60 + sm);
+    if (diff < 0) diff += 24 * 60;
+    return diff;
+  }
 
   const handleSelect = (questionId: string, optionId: string) => {
     setAnswers(prev => ({ ...prev, [questionId]: optionId }))
   }
 
   const handleNext = () => {
-    if (step < questions.length - 1) {
+    if (step < totalSteps - 1) {
       setStep(step + 1)
     } else {
       // Start calibration sequence
@@ -70,7 +82,9 @@ export default function OnboardingPage() {
           await apiPost('/api/auth/onboarding', {
             chronotype: answers['chronotype'],
             burnout: answers['burnout'],
-            leak: answers['leak']
+            leak: answers['leak'],
+            weekoffs: weekoffs,
+            routine: routineTasks
           })
 
           // In AuthContext, checkAuth is called on mount, but we can just set this for fallback
@@ -103,7 +117,7 @@ export default function OnboardingPage() {
           <motion.div 
             className="h-full bg-blue-500"
             initial={{ width: "0%" }}
-            animate={{ width: `${((step) / questions.length) * 100}%` }}
+            animate={{ width: `${((step) / totalSteps) * 100}%` }}
             transition={{ duration: 0.5, ease: "easeInOut" }}
           />
         </div>
@@ -160,18 +174,18 @@ export default function OnboardingPage() {
             >
               <div className="text-center mb-12">
                 <span className="text-blue-500 font-[600] text-sm uppercase tracking-widest mb-3 block">
-                  Calibration {step + 1} of {questions.length}
+                  Calibration {step + 1} of {totalSteps}
                 </span>
                 <h2 className="text-4xl md:text-5xl font-[600] text-white mb-4 tracking-tight">
-                  {questions[step].title}
+                  {step < questions.length ? questions[step].title : step === questions.length ? 'Define Weekoffs' : 'Base Protocol'}
                 </h2>
                 <p className="text-lg text-zinc-400 font-[300]">
-                  {questions[step].desc}
+                  {step < questions.length ? questions[step].desc : step === questions.length ? 'When does your engine rest?' : 'What core actions must be executed daily?'}
                 </p>
               </div>
 
               <div className="space-y-4">
-                {questions[step].options.map((opt) => {
+                {step < questions.length && questions[step].options.map((opt) => {
                   const Icon = opt.icon
                   const isSelected = answers[questions[step].id] === opt.id
                   
@@ -197,6 +211,95 @@ export default function OnboardingPage() {
                     </button>
                   )
                 })}
+
+                {step === questions.length && (
+                  <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-6 text-left">
+                    <label className="block text-sm font-[400] text-zinc-400 mb-6">Select your off days. We will exclude Work/School tasks on these days.</label>
+                    <div className="flex flex-wrap gap-3">
+                      {['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map((day, idx) => (
+                        <button 
+                          key={idx}
+                          onClick={() => setWeekoffs(weekoffs.includes(idx) ? weekoffs.filter(d => d !== idx) : [...weekoffs, idx])}
+                          className={`px-4 py-3 rounded-xl text-sm font-[600] transition-all ${weekoffs.includes(idx) ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50' : 'bg-zinc-800/50 text-zinc-500 border border-zinc-700/50 hover:bg-zinc-800'}`}
+                        >
+                          {day}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {step === questions.length + 1 && (
+                  <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-6 text-left">
+                    <label className="block text-sm font-[400] text-zinc-400 mb-6">Define your core execution timeline. Input the immovable blocks of your daily schedule (e.g., Office Hours, Deep Work, Gym).</label>
+                    
+                    <div className="space-y-3 mb-6">
+                      {routineTasks.map((t, idx) => (
+                        <div key={idx} className="flex items-center gap-2 bg-zinc-900/80 p-3 rounded-xl border border-zinc-700/50">
+                          <input 
+                            type="text" 
+                            value={t.title}
+                            onChange={e => {
+                              const nt = [...routineTasks]
+                              nt[idx].title = e.target.value
+                              setRoutineTasks(nt)
+                            }}
+                            placeholder="Task Title"
+                            className="flex-1 bg-transparent border-b border-zinc-700 text-sm font-[400] text-zinc-300 px-2 py-1 outline-none focus:border-blue-500"
+                          />
+                          <select 
+                            value={t.category}
+                            onChange={e => {
+                              const nt = [...routineTasks]
+                              nt[idx].category = e.target.value
+                              setRoutineTasks(nt)
+                            }}
+                            className="bg-zinc-800 border border-zinc-700 text-xs font-[400] text-zinc-400 p-2 rounded outline-none"
+                          >
+                            <option>Development</option>
+                            <option>Health</option>
+                            <option>Mindset</option>
+                            <option>Routine</option>
+                            <option>Work</option>
+                            <option>Others</option>
+                          </select>
+                          <input 
+                            type="time" 
+                            value={t.time || ''}
+                            onChange={e => {
+                              const nt = [...routineTasks]
+                              nt[idx].time = e.target.value
+                              nt[idx].duration = calcDuration(e.target.value, t.endTime)
+                              setRoutineTasks(nt)
+                            }}
+                            className="bg-zinc-800 border border-zinc-700 text-xs font-[400] text-zinc-300 p-2 rounded outline-none"
+                          />
+                          <span className="text-zinc-500 font-mono text-xs">to</span>
+                          <input 
+                            type="time" 
+                            value={t.endTime || ''}
+                            onChange={e => {
+                              const nt = [...routineTasks]
+                              nt[idx].endTime = e.target.value
+                              nt[idx].duration = calcDuration(t.time, e.target.value)
+                              setRoutineTasks(nt)
+                            }}
+                            className="bg-zinc-800 border border-zinc-700 text-xs font-[400] text-zinc-300 p-2 rounded outline-none"
+                          />
+                          <button onClick={() => setRoutineTasks(routineTasks.filter((_, i) => i !== idx))} className="text-zinc-500 hover:text-rose-400 ml-1 p-1"><X size={14}/></button>
+                        </div>
+                      ))}
+                      {routineTasks.length === 0 && <p className="text-sm font-[300] text-zinc-600 italic">No timeline blocks defined. You can skip this step.</p>}
+                    </div>
+                    
+                    <button 
+                      onClick={() => setRoutineTasks([...routineTasks, { title: '', category: 'Routine', time: '09:00', endTime: '10:00', duration: 60 }])}
+                      className="text-sm font-[600] text-blue-400 hover:text-blue-300 flex items-center gap-1 border border-blue-500/30 bg-blue-500/10 px-4 py-2 rounded-xl transition-all hover:bg-blue-500/20"
+                    >
+                      <Plus size={14}/> ADD TIMELINE BLOCK
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-between mt-12">
@@ -209,14 +312,14 @@ export default function OnboardingPage() {
                 </button>
                 <button 
                   onClick={handleNext}
-                  disabled={!answers[questions[step].id]}
+                  disabled={step < questions.length && !answers[questions[step].id]}
                   className={`flex items-center gap-2 px-8 py-3 rounded-full font-[600] transition-all ${
-                    !answers[questions[step].id] 
+                    (step < questions.length && !answers[questions[step].id])
                       ? 'bg-zinc-900 text-zinc-600 cursor-not-allowed' 
                       : 'bg-white text-black hover:bg-zinc-200'
                   }`}
                 >
-                  {step === questions.length - 1 ? 'Initialize Engine' : 'Continue'} <ArrowRight size={18} />
+                  {step === totalSteps - 1 ? 'Initialize Engine' : 'Continue'} <ArrowRight size={18} />
                 </button>
               </div>
 

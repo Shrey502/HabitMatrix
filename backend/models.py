@@ -8,6 +8,7 @@ class Category(str, Enum):
     HEALTH = 'Health'
     MINDSET = 'Mindset'
     ROUTINE = 'Routine'
+    WORK = 'Work'
     OTHERS = 'Others'
     AUTO = 'Auto'
 
@@ -99,6 +100,8 @@ class RoutineBase(BaseModel):
     title: str
     description: Optional[str] = None
     tasks: list[dict] = []
+    days: list[int] = []
+    is_active: bool = True
 
 class RoutineDB(RoutineBase):
     id: Optional[str] = None
@@ -115,3 +118,5 @@ class UserSettings(BaseModel):
     pomodoro_duration: int = 25
     break_duration: int = 5
     timezone: str = "UTC"
+    weekoffs: list[int] = [5, 6]
+    last_weekly_plan_date: Optional[str] = None

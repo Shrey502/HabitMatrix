@@ -23,6 +23,8 @@ export default function Dashboard() {
   
   const [monthTasks, setMonthTasks] = useState<any[]>([])
   const [isTaskModalOpen, setTaskModalOpen] = useState(false)
+  const [showWeeklyModal, setShowWeeklyModal] = useState(false)
+  const [weeklyDeployedCount, setWeeklyDeployedCount] = useState(0)
   const [taskModalDate, setTaskModalDate] = useState<string | undefined>(undefined)
   const [editingTask, setEditingTask] = useState<any>(null)
   const [activeTaskProgress, setActiveTaskProgress] = useState<{ id: string, progress: number, isActive: boolean } | null>(null)
@@ -100,7 +102,19 @@ export default function Dashboard() {
     }
 
     // Initial fetch
-    const fetchDashboardData = () => {
+    const fetchDashboardData = async () => {
+      // Deploy week routines first
+      try {
+        const deployRes = await apiFetch(`${getAPIUrl()}/api/routines/deploy-week`, { method: 'POST' });
+        const deployData = await deployRes.json()
+        if (deployData.deployed_count && deployData.deployed_count > 0) {
+          setWeeklyDeployedCount(deployData.deployed_count)
+          setShowWeeklyModal(true)
+        }
+      } catch (err) {
+        console.error("Error deploying weekly routines", err);
+      }
+
       // Fetch KPI Metrics
       apiFetch(`${getAPIUrl()}/api/dashboard/metrics`)
         .then(res => res.json())
@@ -156,6 +170,7 @@ export default function Dashboard() {
       // Refresh KPIs after toggle
       const metricsData = await apiFetch(`${getAPIUrl()}/api/dashboard/metrics`).then(res => res.json())
       setMetrics(metricsData)
+      window.dispatchEvent(new Event('refresh_tasks'))
     } catch (err) {
       console.error(err)
       setMonthTasks(originalTasks)
@@ -593,6 +608,47 @@ export default function Dashboard() {
       </div>
 
       {/* Modals */}
+      {showWeeklyModal && (
+        <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center backdrop-blur-sm p-4">
+          <div className="bg-[#050505] border border-zinc-800 p-8 rounded-2xl w-full max-w-md shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-purple-500"></div>
+            <h2 className="text-2xl font-[600] text-white mb-2 font-mono uppercase tracking-tight">Weekly Briefing</h2>
+            <p className="text-zinc-400 text-sm mb-6 font-[300]">Your engine has been provisioned for the upcoming week. Base protocols have been deployed, and Work/School tasks have been successfully stripped from your off days.</p>
+            
+            <div className="bg-zinc-900/50 rounded-xl p-4 mb-6 border border-zinc-800">
+               <p className="text-zinc-300 text-sm font-mono flex items-center gap-2 mb-2"><CheckCircle2 className="text-emerald-500" size={16}/> {weeklyDeployedCount} Tasks Deployed</p>
+               <p className="text-zinc-300 text-sm font-mono flex items-center gap-2"><CheckCircle2 className="text-emerald-500" size={16}/> Auto-Telemetry Active</p>
+            </div>
+            
+            <p className="text-xs text-zinc-500 mb-6 italic font-[300]">You can surgically edit or delete any auto-generated tasks on your timeline without affecting your master templates.</p>
+
+            <button 
+              onClick={() => {
+                setShowWeeklyModal(false);
+                const fetchDashboardData = async () => {
+                  apiFetch(`${getAPIUrl()}/api/dashboard/metrics`)
+                    .then(res => res.json())
+                    .then(data => setMetrics(data))
+                    .catch(err => console.error("Error fetching metrics", err))
+
+                  const startOfMonth = monthDates[0];
+                  const endOfMonth = monthDates[monthDates.length - 1];
+                  
+                  apiFetch(`${getAPIUrl()}/api/tasks/weekly?start_date=${startOfMonth}&end_date=${endOfMonth}`)
+                    .then(res => res.json())
+                    .then(data => setMonthTasks(data))
+                    .catch(err => console.error("Error fetching month tasks", err))
+                };
+                fetchDashboardData();
+              }}
+              className="w-full bg-white text-black font-[600] py-3 rounded-xl hover:bg-zinc-200 transition-colors"
+            >
+              Acknowledge & Execute
+            </button>
+          </div>
+        </div>
+      )}
+
       {isTaskModalOpen && (
         <TaskModal 
           onClose={() => {
