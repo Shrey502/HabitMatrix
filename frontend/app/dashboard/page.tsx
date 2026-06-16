@@ -1,7 +1,7 @@
 'use client'
 import { apiFetch } from '@/lib/api';
 import { useState, useEffect, useRef } from 'react'
-import { Plus, CheckCircle2, Circle, Clock, Calendar, Activity, ShieldCheck, Radio, Sparkles, Pencil } from 'lucide-react'
+import { Plus, CheckCircle2, Circle, Clock, Calendar, Activity, ShieldCheck, Radio, Sparkles, Pencil, RefreshCw } from 'lucide-react'
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Sector, CartesianGrid } from 'recharts'
 import TaskModal from '@/components/TaskModal'
 import DayManagerModal from '@/components/DayManagerModal'
@@ -36,7 +36,6 @@ export default function Dashboard() {
   const [displayDate, setDisplayDate] = useState<string>('')
   const [activePieIndex, setActivePieIndex] = useState<number | null>(null)
   const [currentTime, setCurrentTime] = useState<Date>(new Date())
-  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     setDisplayDate(getLocalISODate())
@@ -46,27 +45,8 @@ export default function Dashboard() {
     }, 1000) // Update every second for live timers
     return () => {
       clearInterval(interval)
-      if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current)
     }
   }, [])
-
-  const handleCellMouseEnter = (date: string) => {
-    if (hoverTimeoutRef.current) {
-      clearTimeout(hoverTimeoutRef.current)
-    }
-    hoverTimeoutRef.current = setTimeout(() => {
-      setDisplayDate(date)
-    }, 80) // 80ms delay to prevent lag when sweeping the mouse
-  }
-
-  const handleCellMouseLeave = () => {
-    if (hoverTimeoutRef.current) {
-      clearTimeout(hoverTimeoutRef.current)
-    }
-    hoverTimeoutRef.current = setTimeout(() => {
-      setDisplayDate(getLocalISODate())
-    }, 80)
-  }
 
   const focusData = findFocusTask(monthTasks, currentTime);
 
@@ -296,6 +276,16 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex items-center gap-4">
+          <button 
+            onClick={() => {
+              setDisplayDate(getLocalISODate())
+              window.dispatchEvent(new Event('refresh_tasks'))
+            }}
+            className="p-2 text-zinc-500 hover:text-sky-400 hover:bg-zinc-900 rounded-full transition-all duration-300"
+            title="Refresh Dashboard"
+          >
+            <RefreshCw size={18} />
+          </button>
           <NotificationBell />
           <button 
             onClick={() => { setTaskModalDate(activeDate); setTaskModalOpen(true); }}
@@ -313,7 +303,7 @@ export default function Dashboard() {
         <div className="col-span-12 xl:col-span-8 space-y-6">
           
           {/* Tactical Scrub Calendar */}
-          <div className="cinematic-panel p-5 rounded-xl border border-zinc-800/40">
+          <div className="relative z-50 cinematic-panel !overflow-visible p-5 rounded-xl border border-zinc-800/40">
             <div className="flex justify-between items-center mb-4">
               <div className="flex items-center gap-2">
                 <Calendar size={14} className="text-accent-dev" />
@@ -328,21 +318,43 @@ export default function Dashboard() {
                 const doneCount = dayTasks.filter(t => t.status === 'Done').length;
                 const dayNumber = date.split('-')[2];
                 const isHovered = date === activeDate;
+                const isToday = date === getLocalISODate();
 
                 return (
                   <div 
                     key={date}
-                    onClick={() => setSelectedDay(date)}
-                    onMouseEnter={() => handleCellMouseEnter(date)}
-                    onMouseLeave={handleCellMouseLeave}
-                    className={`relative flex flex-col items-center justify-center h-12 rounded-lg cursor-pointer transition-all duration-300 ${getIntensityClass(dayTasks.length, isHovered)}`}
+                    className={`relative group hover:z-[70] flex flex-col items-center justify-center h-12 rounded-lg cursor-default transition-all duration-300 ${getIntensityClass(dayTasks.length, isHovered)} ${isToday && !isHovered ? 'border-amber-500/30 bg-amber-500/5' : ''}`}
                   >
-                    <span className="font-bold text-xs font-mono">{dayNumber}</span>
+                    {isToday && (
+                      <span className="absolute top-1 right-1 flex h-1.5 w-1.5" title="Today">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-500"></span>
+                      </span>
+                    )}
+                    <span className={`font-bold text-xs font-mono ${isToday ? 'text-amber-400' : ''}`}>{dayNumber}</span>
                     {dayTasks.length > 0 && (
                       <span className="text-[8px] font-mono mt-0.5 opacity-60">
                         {doneCount}/{dayTasks.length}
                       </span>
                     )}
+                    
+                    {/* Hover Menu Overlay */}
+                    <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[60] flex flex-col gap-1.5 bg-zinc-950/95 backdrop-blur-xl border border-zinc-700/50 p-2 rounded-xl shadow-[0_15px_35px_-5px_rgba(0,0,0,0.8),0_0_15px_rgba(56,189,248,0.1)] min-w-[150px]">
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); setSelectedDay(date); }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 bg-zinc-900/50 hover:bg-amber-500/15 border border-zinc-800/50 hover:border-amber-500/40 rounded-lg font-mono text-[10px] font-semibold tracking-wider text-zinc-300 hover:text-amber-400 transition-all duration-300 group/btn shadow-inner"
+                      >
+                        <CheckCircle2 size={13} className="text-amber-500/70 group-hover/btn:text-amber-400 group-hover/btn:scale-110 transition-all" />
+                        <span>TASKS</span>
+                      </button>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); setDisplayDate(date); }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 bg-zinc-900/50 hover:bg-sky-500/15 border border-zinc-800/50 hover:border-sky-500/40 rounded-lg font-mono text-[10px] font-semibold tracking-wider text-zinc-300 hover:text-sky-400 transition-all duration-300 group/btn shadow-inner"
+                      >
+                        <Activity size={13} className="text-sky-500/70 group-hover/btn:text-sky-400 group-hover/btn:scale-110 transition-all" />
+                        <span>DASHBOARD</span>
+                      </button>
+                    </div>
                   </div>
                 )
               })}
