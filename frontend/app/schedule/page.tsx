@@ -617,7 +617,7 @@ export default function SchedulePage() {
               
               {/* NOW Indicator */}
               {(() => {
-                 const startOfView = new Date(`${date}T12:00:00`);
+                 const startOfView = new Date(`${date}T00:00:00`);
                  const endOfView = new Date(startOfView);
                  endOfView.setHours(endOfView.getHours() + 24);
                  

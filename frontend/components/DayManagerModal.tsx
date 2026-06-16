@@ -13,7 +13,7 @@ const BADGE_COLORS = { Development: 'bg-accent-dev/20 text-accent-dev', Health: 
 
 export default function DayManagerModal({ date, tasks, onClose, onToggleTask, onOpenNewTask }: DayManagerProps) {
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-40 backdrop-blur-sm">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] backdrop-blur-sm">
       <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-xl w-full max-w-lg shadow-2xl">
         <div className="flex justify-between items-center mb-6">
           <div>

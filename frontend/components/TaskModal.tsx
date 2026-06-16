@@ -79,7 +79,7 @@ export default function TaskModal({ onClose, defaultDate, editTask }: { onClose:
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] backdrop-blur-sm">
       <div className="bg-zinc-900 border border-zinc-800/80 p-6 rounded-xl w-full max-w-md shadow-2xl font-mono relative">
         <div className="flex justify-between items-center mb-6 border-b border-zinc-800 pb-3">
           <h2 className="text-sm font-bold text-zinc-100 uppercase tracking-wider">
