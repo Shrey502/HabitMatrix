@@ -34,30 +34,49 @@ export default function PomodoroFocus({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskId, currentProgress, isActive])
 
-  // Load state on mount
+  // Load state on mount and listen to changes
   useEffect(() => {
-    const saved = localStorage.getItem('pomodoro_state')
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved)
-        const now = Date.now()
-        
-        if (parsed.isActive) {
-          const elapsedSecs = Math.floor((now - parsed.lastTick) / 1000)
-          const newTimeLeft = Math.max(0, parsed.timeLeft - elapsedSecs)
-          setTimeLeft(newTimeLeft)
-          setIsActive(newTimeLeft > 0)
-        } else {
-          setTimeLeft(parsed.timeLeft)
-          setIsActive(false)
+    const loadState = () => {
+      const saved = localStorage.getItem('pomodoro_state')
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved)
+          const now = Date.now()
+          
+          if (parsed.isActive) {
+            const elapsedSecs = Math.floor((now - parsed.lastTick) / 1000)
+            const newTimeLeft = Math.max(0, parsed.timeLeft - elapsedSecs)
+            setTimeLeft(newTimeLeft)
+            setIsActive(newTimeLeft > 0)
+          } else {
+            setTimeLeft(parsed.timeLeft)
+            setIsActive(false)
+          }
+          setInitialTime(parsed.initialTime)
+          setTaskId(parsed.taskId)
+        } catch (e) {
+          console.error("Failed to parse pomodoro state", e)
         }
-        setInitialTime(parsed.initialTime)
-        setTaskId(parsed.taskId)
-      } catch (e) {
-        console.error("Failed to parse pomodoro state", e)
+      } else {
+         setTaskId(null)
+         setIsActive(false)
       }
+      setIsLoaded(true)
     }
-    setIsLoaded(true)
+
+    loadState()
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'pomodoro_state') loadState()
+    }
+    
+    window.addEventListener('storage', handleStorage)
+    window.addEventListener('sync_pomodoro', loadState)
+
+    return () => {
+      window.removeEventListener('storage', handleStorage)
+      window.removeEventListener('sync_pomodoro', loadState)
+    }
   }, [])
 
   // Timer interval

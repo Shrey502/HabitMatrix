@@ -568,15 +568,23 @@ export default function Dashboard() {
                         <span className={`text-[8px] px-1.5 py-0.5 rounded font-mono font-bold border ${BADGE_COLORS[task.category as keyof typeof BADGE_COLORS] || BADGE_COLORS.Others}`}>
                           {task.category.toUpperCase()}
                         </span>
-                        {task.time && (() => {
+                        {(() => {
                           const isPomodoroActive = activeTaskProgress?.id === task._id && activeTaskProgress?.isActive;
                           const timeStatus = getTaskTimeStatus(task.date, task.time, task.duration, task.status, isPomodoroActive);
+                          
+                          if (!task.time && !timeStatus) return null;
+                          
                           return (
                             <span className={`text-[8px] font-mono flex items-center gap-1.5 ${timeStatus?.color || 'text-zinc-500'}`}>
-                              <Clock size={10} />
-                              <span>{task.time}</span>
-                              {task.duration && <span className="text-zinc-650">({task.duration}m)</span>}
-                              {timeStatus && <span className="border-l border-zinc-800 pl-1.5">{timeStatus.text}</span>}
+                              {task.time && (
+                                <>
+                                  <Clock size={10} />
+                                  <span>{task.time}</span>
+                                  {task.duration && <span className="text-zinc-650">({task.duration}m)</span>}
+                                  {timeStatus && <span className="border-l border-zinc-800 pl-1.5"></span>}
+                                </>
+                              )}
+                              {timeStatus && <span>{timeStatus.text}</span>}
                             </span>
                           );
                         })()}

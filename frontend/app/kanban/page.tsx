@@ -65,9 +65,48 @@ export default function KanbanBoard() {
 
     // Cross-column move
     const wasDone = newStatus === 'Done'
-    if (wasDone) {
-      setCompletedFlash(draggableId)
-      setTimeout(() => setCompletedFlash(null), 1200)
+    if (wasDone || newStatus === 'To-Do') {
+      if (wasDone) {
+        setCompletedFlash(draggableId)
+        setTimeout(() => setCompletedFlash(null), 1200)
+      }
+      const saved = localStorage.getItem('pomodoro_state');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.taskId === draggableId) {
+             localStorage.removeItem('pomodoro_state');
+             window.dispatchEvent(new Event('sync_pomodoro'));
+          }
+        } catch(e){}
+      }
+    } else if (newStatus === 'In Progress') {
+      const draggedTask = tasks.find(t => t._id === draggableId);
+      if (draggedTask) {
+        const saved = localStorage.getItem('pomodoro_state');
+        let maintainTime = false;
+        let existingLeft = 0;
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (parsed.taskId === draggableId && parsed.timeLeft > 0) {
+               maintainTime = true;
+               existingLeft = parsed.timeLeft;
+            }
+          } catch(e){}
+        }
+        
+        const durationSecs = (draggedTask.duration || 25) * 60;
+        const pomodoroState = {
+          isActive: true,
+          timeLeft: maintainTime ? existingLeft : durationSecs,
+          initialTime: durationSecs,
+          lastTick: Date.now(),
+          taskId: draggableId
+        };
+        localStorage.setItem('pomodoro_state', JSON.stringify(pomodoroState));
+        window.dispatchEvent(new Event('sync_pomodoro'));
+      }
     }
 
     // Proper optimistic update: place the item at the EXACT destination index
