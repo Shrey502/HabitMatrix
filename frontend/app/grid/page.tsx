@@ -44,6 +44,7 @@ interface CompletedTask {
   category: string;
   date: string;
   duration: number | null;
+  status: string;
 }
 
 export default function ContributionGrid() {
@@ -71,9 +72,10 @@ export default function ContributionGrid() {
 
   // Filter tasks based on selected category
   const filteredTasks = allTasks.filter(t => categoryFilter === 'All' || t.category === categoryFilter)
+  const completedTasks = filteredTasks.filter(t => t.status === 'Done')
 
-  // Compute grid data mapping: date -> value (count or time in hours)
-  const gridData = filteredTasks.reduce((acc, t) => {
+  // Compute grid data mapping for completed stats
+  const gridData = completedTasks.reduce((acc, t) => {
     if (viewMode === 'count') {
       acc[t.date] = (acc[t.date] || 0) + 1
     } else {
@@ -83,7 +85,35 @@ export default function ContributionGrid() {
     return acc
   }, {} as Record<string, number>)
 
-  const getDotStyle = (val: number) => {
+  const missedGridData = filteredTasks.reduce((acc, t) => {
+    if (!acc[t.date]) acc[t.date] = { total: 0, missed: 0 }
+    acc[t.date].total += 1
+    if (t.status !== 'Done') {
+      acc[t.date].missed += 1
+    }
+    return acc
+  }, {} as Record<string, { total: number, missed: number }>)
+
+  const getDotStyle = (date: string) => {
+    const todayStr = getLocalISODate()
+    const missedData = missedGridData[date]
+    const val = gridData[date] || 0
+
+    if (!missedData || missedData.total === 0 || date > todayStr) {
+      if (!val || val === 0) return { size: '4px', bg: '#1c1c1f', glow: 'none' }
+    }
+
+    if (missedData && missedData.missed > 0 && date <= todayStr) {
+      const ratio = missedData.missed / missedData.total
+      const opacity = Math.max(0.1, ratio)
+      return { 
+        size: '12px', 
+        bg: `rgba(239, 68, 68, ${opacity})`, 
+        glow: `0 0 16px rgba(239, 68, 68, ${opacity * 0.8})`,
+        isMissed: true
+      }
+    }
+
     if (!val || val === 0) return { size: '4px', bg: '#1c1c1f', glow: 'none' }
     if (viewMode === 'count') {
       if (val === 1) return { size: '6px', bg: '#1e3a5f', glow: 'none' }
@@ -98,7 +128,11 @@ export default function ContributionGrid() {
     }
   }
 
-  const getIntensityLabel = (val: number): string => {
+  const getIntensityLabel = (date: string, val: number): string => {
+    const missedData = missedGridData[date]
+    if (missedData && missedData.missed > 0 && date <= getLocalISODate()) {
+      return `${missedData.missed} / ${missedData.total} Tasks Missed`
+    }
     if (!val || val === 0) return 'No activity'
     if (viewMode === 'count') {
       return val === 1 ? '1 task' : `${val} tasks`
@@ -328,8 +362,8 @@ export default function ContributionGrid() {
                 if (!date) return <div key={`empty-${i}`} className="w-4 h-4" />
                 const val = gridData[date] ?? 0
                 const isToday = date === todayStr
-                const style = getDotStyle(val)
-                const isBubbling = val > 0
+                const style = getDotStyle(date)
+                const isBubbling = val > 0 || (style as any).isMissed
                 // Generate a stable random delay based on date string so it doesn't flicker on re-renders
                 const delay = isBubbling ? (date.charCodeAt(date.length - 1) % 4) + (date.charCodeAt(date.length - 2) % 10) * 0.1 : 0
                 
@@ -341,10 +375,10 @@ export default function ContributionGrid() {
                       setTooltip({ date, value: val, x: r.left, y: r.top })
                     }}
                     onMouseLeave={() => setTooltip(null)}
-                    onClick={() => { if (val > 0) setSelectedDate(date) }}
+                    onClick={() => { if (filteredTasks.some(t => t.date === date)) setSelectedDate(date) }}
                   >
                     <div 
-                      className={`rounded-full transition-all duration-300 ${isToday ? 'ring-2 ring-amber-500 ring-offset-1 ring-offset-zinc-950' : ''} ${val > 0 ? 'cursor-pointer hover:!scale-150 animate-grid-bubble' : ''}`}
+                      className={`rounded-full transition-all duration-300 ${isToday ? 'ring-2 ring-amber-500 ring-offset-1 ring-offset-zinc-950' : ''} ${isBubbling ? 'cursor-pointer hover:!scale-150 animate-grid-bubble' : ''}`}
                       style={{ 
                         width: style.size, 
                         height: style.size, 
@@ -384,7 +418,7 @@ export default function ContributionGrid() {
           className="fixed z-50 pointer-events-none bg-zinc-950 border border-zinc-800/90 rounded-lg px-3 py-2 text-xs font-mono shadow-2xl"
           style={{ left: tooltip.x + 16, top: tooltip.y - 56 }}>
           <p className="text-zinc-400 font-bold">{new Date(tooltip.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</p>
-          <p className="text-accent-dev font-bold mt-0.5">{getIntensityLabel(tooltip.value).toUpperCase()}</p>
+          <p className={`font-bold mt-0.5 ${(getDotStyle(tooltip.date) as any).isMissed ? 'text-rose-400' : 'text-accent-dev'}`}>{getIntensityLabel(tooltip.date, tooltip.value).toUpperCase()}</p>
         </div>
       )}
 
@@ -411,7 +445,7 @@ export default function ContributionGrid() {
                     {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
                   </h3>
                   <p className="text-[10px] font-mono text-zinc-500 uppercase mt-1">
-                    {activeDateTasks.length} Tasks Completed // {(activeDateTasks.reduce((a, t) => a + (t.duration || 0), 0) / 60).toFixed(1)} Hours
+                    {activeDateTasks.filter(t => t.status === 'Done').length} / {activeDateTasks.length} Tasks Completed // {(activeDateTasks.filter(t => t.status === 'Done').reduce((a, t) => a + (t.duration || 0), 0) / 60).toFixed(1)} Hours
                   </p>
                 </div>
                 <button onClick={() => setSelectedDate(null)} className="p-2 hover:bg-zinc-900 rounded-lg transition-colors text-zinc-500 hover:text-zinc-300">
@@ -448,13 +482,15 @@ export default function ContributionGrid() {
                 )}
 
                 <div className="space-y-2">
-                  <h4 className="text-[10px] font-mono text-zinc-500 tracking-widest uppercase mb-2">Executed Tasks</h4>
-                {activeDateTasks.map(task => (
+                  <h4 className="text-[10px] font-mono text-zinc-500 tracking-widest uppercase mb-2">Scheduled Tasks</h4>
+                {activeDateTasks.map(task => {
+                  const isDone = task.status === 'Done';
+                  return (
                   <div key={task._id} className="bg-zinc-900/50 border border-zinc-800/80 p-3 rounded-lg flex flex-col gap-2 group hover:border-zinc-700 transition-colors">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-start gap-2">
-                        <CheckCircle2 size={14} className="text-emerald-500 shrink-0 mt-0.5" />
-                        <p className="text-sm font-semibold text-zinc-200 leading-tight group-hover:text-sky-300 transition-colors">{task.title}</p>
+                        {isDone ? <CheckCircle2 size={14} className="text-emerald-500 shrink-0 mt-0.5" /> : <X size={14} className="text-rose-500 shrink-0 mt-0.5" />}
+                        <p className={`text-sm font-semibold leading-tight transition-colors ${isDone ? 'text-zinc-200 group-hover:text-sky-300' : 'text-zinc-500 group-hover:text-rose-300 line-through'}`}>{task.title}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 pl-6">
@@ -468,7 +504,8 @@ export default function ContributionGrid() {
                       )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
                 {activeDateTasks.length === 0 && <p className="text-[10px] font-mono text-zinc-600">No tasks recorded.</p>}
                 </div>
               </div>

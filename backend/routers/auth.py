@@ -141,3 +141,40 @@ async def update_settings(settings: UserSettings, user_id: str = Depends(get_cur
     if not res.data:
         raise HTTPException(status_code=404, detail="User not found")
     return {"message": "Settings updated"}
+
+@router.post("/auth/checkin")
+async def checkin(user_id: str = Depends(get_current_user)):
+    res = supabase.table("users").select("settings").eq("user_id", user_id).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    settings = res.data[0].get("settings") or UserSettings().model_dump()
+    
+    now = datetime.now(timezone.utc)
+    settings["system_status"] = "Checked_In"
+    settings["last_checkin_time"] = now.isoformat()
+    settings["biological_date"] = now.strftime("%Y-%m-%d")
+    
+    update_res = supabase.table("users").update({"settings": settings}).eq("user_id", user_id).execute()
+    if not update_res.data:
+        raise HTTPException(status_code=500, detail="Failed to update settings")
+        
+    return {"message": "System Checked In", "biological_date": settings["biological_date"]}
+
+@router.post("/auth/checkout")
+async def checkout(user_id: str = Depends(get_current_user)):
+    res = supabase.table("users").select("settings").eq("user_id", user_id).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    settings = res.data[0].get("settings") or UserSettings().model_dump()
+    now = datetime.now(timezone.utc)
+    
+    settings["system_status"] = "Checked_Out"
+    settings["last_checkout_time"] = now.isoformat()
+    
+    update_res = supabase.table("users").update({"settings": settings}).eq("user_id", user_id).execute()
+    if not update_res.data:
+        raise HTTPException(status_code=500, detail="Failed to update settings")
+        
+    return {"message": "System Checked Out"}

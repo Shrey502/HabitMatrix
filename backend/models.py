@@ -16,6 +16,7 @@ class Status(str, Enum):
     TODO = 'To-Do'
     IN_PROGRESS = 'In Progress'
     DONE = 'Done'
+    SKIPPED = 'Skipped'
 
 class TaskBase(BaseModel):
     user_id: Optional[str] = None
@@ -28,6 +29,7 @@ class TaskBase(BaseModel):
     reminder_minutes: Optional[int] = 15
     routine_id: Optional[str] = None
     procrastination_delta: Optional[int] = 0
+    is_locked: bool = False
 
 class TaskDB(TaskBase):
     id: Optional[str] = None
@@ -49,6 +51,7 @@ class TaskUpdate(BaseModel):
     duration: Optional[int] = None
     reminder_minutes: Optional[int] = None
     procrastination_delta: Optional[int] = None
+    is_locked: Optional[bool] = None
 
 class GoalNodeBase(BaseModel):
     user_id: Optional[str] = None
@@ -122,3 +125,7 @@ class UserSettings(BaseModel):
     timezone: str = "UTC"
     weekoffs: list[int] = [5, 6]
     last_weekly_plan_date: Optional[str] = None
+    system_status: str = "Checked_Out"
+    last_checkin_time: Optional[str] = None
+    last_checkout_time: Optional[str] = None
+    biological_date: Optional[str] = None

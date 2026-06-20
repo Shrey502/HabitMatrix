@@ -28,6 +28,7 @@ async def create_task(task: TaskBase, user_id: str = Depends(get_current_user)):
         "duration": task.duration,
         "reminder_minutes": task.reminder_minutes,
         "routine_id": task.routine_id,
+        "is_locked": task.is_locked,
     }
     res = supabase.table("tasks").insert(insert_data).execute()
     if not res.data:
@@ -57,7 +58,13 @@ async def update_task_status(id: str, update: TaskUpdateStatus, user_id: str = D
 
 @router.get("/tasks/today")
 async def get_today_tasks(user_id: str = Depends(get_current_user)):
+    user_res = supabase.table("users").select("settings").eq("user_id", user_id).execute()
     today = str(datetime.now(timezone.utc).date())
+    if user_res.data and user_res.data[0].get("settings"):
+        settings = user_res.data[0]["settings"]
+        if settings.get("biological_date"):
+            today = settings["biological_date"]
+            
     res = supabase.table("tasks").select("*").eq("user_id", user_id).eq("date", today).execute()
     tasks = res.data or []
     for t in tasks:
@@ -120,3 +127,90 @@ async def update_task(id: str, update: TaskUpdate, user_id: str = Depends(get_cu
     if not res.data:
         raise HTTPException(status_code=404, detail="Task not found")
     return res.data[0]
+
+from pydantic import BaseModel
+
+class RescheduleRequest(BaseModel):
+    task_ids: List[str]
+    tomorrow_task_ids: List[str] = []
+    skipped_task_ids: List[str] = []
+
+@router.get("/tasks/missed", response_model=List[TaskDB])
+async def get_missed_tasks(user_id: str = Depends(get_current_user)):
+    user_res = supabase.table("users").select("settings").eq("user_id", user_id).execute()
+    biological_date = str(datetime.now(timezone.utc).date())
+    if user_res.data and user_res.data[0].get("settings"):
+        settings = user_res.data[0]["settings"]
+        if settings.get("biological_date"):
+            biological_date = settings["biological_date"]
+
+    res = supabase.table("tasks").select("*").eq("user_id", user_id).lt("date", biological_date).in_("status", ["To-Do", "In Progress"]).execute()
+    return res.data or []
+
+@router.post("/tasks/reschedule")
+async def calculate_reschedule(req: RescheduleRequest, user_id: str = Depends(get_current_user)):
+    if not req.task_ids:
+        return {"proposed_schedule": [], "warnings": [], "total_missed_duration": 0}
+        
+    missed_res = supabase.table("tasks").select("*").in_("id", req.task_ids).eq("user_id", user_id).execute()
+    missed_tasks = missed_res.data or []
+    total_missed_duration = sum([t.get("duration") or 30 for t in missed_tasks])
+    
+    user_res = supabase.table("users").select("settings").eq("user_id", user_id).execute()
+    biological_date = str(datetime.now(timezone.utc).date())
+    if user_res.data and user_res.data[0].get("settings"):
+        settings = user_res.data[0]["settings"]
+        if settings.get("biological_date"):
+            biological_date = settings["biological_date"]
+            
+    today_res = supabase.table("tasks").select("*").eq("user_id", user_id).eq("date", biological_date).execute()
+    today_tasks = today_res.data or []
+    
+    total_today_duration = sum([t.get("duration") or 30 for t in today_tasks])
+    warnings = []
+    
+    if total_today_duration + total_missed_duration > 720:
+        warnings.append("WARNING: Pushing these tasks will heavily reflect on your Free Time and Sleep metrics. Exceeding 12 hours of scheduled work.")
+        
+    has_locked = any([t.get("is_locked") for t in today_tasks])
+    if has_locked and total_today_duration + total_missed_duration > 600:
+        warnings.append("WARNING: The mathematical engine is encroaching on your locked routines (Meals/Breaks). Proceed with caution.")
+        
+    proposed = []
+    for t in missed_tasks:
+        proposed.append({
+            "id": t["id"],
+            "title": t["title"],
+            "old_date": t["date"],
+            "new_date": biological_date,
+            "duration": t.get("duration") or 30
+        })
+        
+    return {
+        "proposed_schedule": proposed,
+        "warnings": warnings,
+        "total_missed_duration": total_missed_duration
+    }
+
+@router.post("/tasks/reschedule/commit")
+async def commit_reschedule(req: RescheduleRequest, user_id: str = Depends(get_current_user)):
+    user_res = supabase.table("users").select("settings").eq("user_id", user_id).execute()
+    biological_date = str(datetime.now(timezone.utc).date())
+    if user_res.data and user_res.data[0].get("settings"):
+        settings = user_res.data[0]["settings"]
+        if settings.get("biological_date"):
+            biological_date = settings["biological_date"]
+            
+    if req.task_ids:
+        supabase.table("tasks").update({"date": biological_date}).in_("id", req.task_ids).eq("user_id", user_id).execute()
+        
+    if req.tomorrow_task_ids:
+        from datetime import timedelta
+        b_date_obj = datetime.strptime(biological_date, "%Y-%m-%d").date()
+        tomorrow_date = str(b_date_obj + timedelta(days=1))
+        supabase.table("tasks").update({"date": tomorrow_date}).in_("id", req.tomorrow_task_ids).eq("user_id", user_id).execute()
+        
+    if req.skipped_task_ids:
+        supabase.table("tasks").update({"status": "Skipped"}).in_("id", req.skipped_task_ids).eq("user_id", user_id).execute()
+        
+    return {"message": "Tasks rescheduled and skipped successfully"}

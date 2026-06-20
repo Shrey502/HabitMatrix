@@ -12,6 +12,7 @@ import { getLocalISODate, getAPIUrl } from '@/components/dateUtils'
 import { COLORS, BADGE_COLORS } from '@/lib/constants'
 import { getTaskTimeStatus, findFocusTask, getFocusQuote } from '@/lib/taskUtils'
 import { useAuth } from '@/lib/AuthContext'
+import RecoveryModal from '@/components/RecoveryModal'
 
 const CustomPie = Pie as any;
 
@@ -29,6 +30,11 @@ export default function Dashboard() {
   const [editingTask, setEditingTask] = useState<any>(null)
   const [activeTaskProgress, setActiveTaskProgress] = useState<{ id: string, progress: number, isActive: boolean } | null>(null)
   
+  // Check in/out state
+  const [systemStatus, setSystemStatus] = useState<string>('Checked_In')
+  const [showRecoveryModal, setShowRecoveryModal] = useState(false)
+  const [missedTasks, setMissedTasks] = useState<any[]>([])
+  
   // Day Manager Modal State
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
   
@@ -36,19 +42,6 @@ export default function Dashboard() {
   const [displayDate, setDisplayDate] = useState<string>('')
   const [activePieIndex, setActivePieIndex] = useState<number | null>(null)
   const [currentTime, setCurrentTime] = useState<Date>(new Date())
-
-  useEffect(() => {
-    setDisplayDate(getLocalISODate())
-    setCurrentTime(new Date())
-    const interval = setInterval(() => {
-      setCurrentTime(new Date())
-    }, 1000) // Update every second for live timers
-    return () => {
-      clearInterval(interval)
-    }
-  }, [])
-
-  const focusData = findFocusTask(monthTasks, currentTime);
 
   // Generate Current Month Dates
   const getDaysInCurrentMonth = () => {
@@ -64,6 +57,59 @@ export default function Dashboard() {
   }
   
   const monthDates = getDaysInCurrentMonth();
+
+  const fetchDashboardData = async () => {
+    // Deploy week routines first
+    try {
+      const deployRes = await apiFetch(`${getAPIUrl()}/api/routines/deploy-week`, { method: 'POST' });
+      const deployData = await deployRes.json()
+      if (deployData.deployed_count && deployData.deployed_count > 0) {
+        setWeeklyDeployedCount(deployData.deployed_count)
+        setShowWeeklyModal(true)
+      }
+    } catch (err) {
+      console.error("Error deploying weekly routines", err);
+    }
+
+    try {
+      // Fetch User Settings for Biological Date and System Status
+      const settingsRes = await apiFetch(`${getAPIUrl()}/api/auth/me`)
+      const settingsData = await settingsRes.json()
+      const settings = settingsData.settings || {}
+      
+      const newStatus = settings.system_status || 'Checked_In'
+      setSystemStatus(newStatus)
+      
+      const biologicalDate = settings.biological_date || getLocalISODate()
+      setDisplayDate(biologicalDate)
+
+      // Fetch KPI Metrics
+      const metricsRes = await apiFetch(`${getAPIUrl()}/api/dashboard/metrics`)
+      setMetrics(await metricsRes.json())
+
+      // Fetch All Tasks for Current Month
+      const startOfMonth = getDaysInCurrentMonth()[0]
+      const endOfMonth = getDaysInCurrentMonth()[getDaysInCurrentMonth().length - 1]
+      
+      const tasksRes = await apiFetch(`${getAPIUrl()}/api/tasks/weekly?start_date=${startOfMonth}&end_date=${endOfMonth}`)
+      setMonthTasks(await tasksRes.json())
+    } catch (err) {
+      console.error("Error fetching dashboard data", err)
+    }
+  };
+
+  useEffect(() => {
+    fetchDashboardData()
+    setCurrentTime(new Date())
+    const interval = setInterval(() => {
+      setCurrentTime(new Date())
+    }, 1000) // Update every second for live timers
+    return () => {
+      clearInterval(interval)
+    }
+  }, [])
+
+  const focusData = findFocusTask(monthTasks, currentTime);
 
   useEffect(() => {
     // Handle Google Calendar Sync success param check safely on client side
@@ -81,42 +127,40 @@ export default function Dashboard() {
       }
     }
 
-    // Initial fetch
-    const fetchDashboardData = async () => {
-      // Deploy week routines first
-      try {
-        const deployRes = await apiFetch(`${getAPIUrl()}/api/routines/deploy-week`, { method: 'POST' });
-        const deployData = await deployRes.json()
-        if (deployData.deployed_count && deployData.deployed_count > 0) {
-          setWeeklyDeployedCount(deployData.deployed_count)
-          setShowWeeklyModal(true)
-        }
-      } catch (err) {
-        console.error("Error deploying weekly routines", err);
-      }
-
-      // Fetch KPI Metrics
-      apiFetch(`${getAPIUrl()}/api/dashboard/metrics`)
-        .then(res => res.json())
-        .then(data => setMetrics(data))
-        .catch(err => console.error("Error fetching metrics", err))
-
-      // Fetch All Tasks for Current Month
-      const startOfMonth = monthDates[0];
-      const endOfMonth = monthDates[monthDates.length - 1];
-      
-      apiFetch(`${getAPIUrl()}/api/tasks/weekly?start_date=${startOfMonth}&end_date=${endOfMonth}`)
-        .then(res => res.json())
-        .then(data => setMonthTasks(data))
-        .catch(err => console.error("Error fetching month tasks", err))
-    };
-
-    fetchDashboardData();
-
-    // Listen to custom refresh event
+    // Listens for external refresh
     window.addEventListener('refresh_tasks', fetchDashboardData);
     return () => window.removeEventListener('refresh_tasks', fetchDashboardData);
   }, [])
+
+  const handleCheckIn = async () => {
+    try {
+      const res = await apiFetch(`${getAPIUrl()}/api/auth/checkin`, { method: 'POST' })
+      const data = await res.json()
+      setSystemStatus('Checked_In')
+      setDisplayDate(data.biological_date || getLocalISODate())
+      
+      // Check for missed tasks immediately
+      const missedRes = await apiFetch(`${getAPIUrl()}/api/tasks/missed`)
+      const missedData = await missedRes.json()
+      if (missedData && missedData.length > 0) {
+        setMissedTasks(missedData)
+        setShowRecoveryModal(true)
+      }
+      
+      fetchDashboardData()
+    } catch (err) {
+      alert("Error checking in")
+    }
+  }
+
+  const handleCheckOut = async () => {
+    try {
+      await apiFetch(`${getAPIUrl()}/api/auth/checkout`, { method: 'POST' })
+      setSystemStatus('Checked_Out')
+    } catch (err) {
+      alert("Error checking out")
+    }
+  }
 
   // Calculate intensity class based on total tasks for a day
   const getIntensityClass = (total: number, isHovered: boolean) => {
@@ -278,8 +322,7 @@ export default function Dashboard() {
         <div className="flex items-center gap-4">
           <button 
             onClick={() => {
-              setDisplayDate(getLocalISODate())
-              window.dispatchEvent(new Event('refresh_tasks'))
+              fetchDashboardData()
             }}
             className="p-2 text-zinc-500 hover:text-sky-400 hover:bg-zinc-900 rounded-full transition-all duration-300"
             title="Refresh Dashboard"
@@ -287,12 +330,21 @@ export default function Dashboard() {
             <RefreshCw size={18} />
           </button>
           <NotificationBell />
-          <button 
-            onClick={() => { setTaskModalDate(activeDate); setTaskModalOpen(true); }}
-            className="bg-amber-500/10 border border-amber-500/30 text-amber-500 px-4 py-2 rounded-lg font-mono text-xs font-semibold flex items-center gap-2 hover:bg-amber-500/25 transition-all duration-300 shadow-[0_0_15px_rgba(251,191,36,0.03)]"
-          >
-            <Plus size={14} /> NEW_TASK
-          </button>
+          {systemStatus === 'Checked_In' ? (
+            <button 
+              onClick={handleCheckOut}
+              className="bg-rose-500/10 border border-rose-500/30 text-rose-500 px-5 py-2.5 rounded-lg font-mono text-xs font-bold tracking-widest hover:bg-rose-500/20 transition-all duration-300 shadow-[0_0_15px_rgba(244,63,94,0.05)]"
+            >
+              SYSTEM CHECK OUT
+            </button>
+          ) : (
+            <button 
+              onClick={handleCheckIn}
+              className="bg-emerald-500 border border-emerald-500/30 text-black px-5 py-2.5 rounded-lg font-mono text-xs font-bold tracking-widest hover:bg-emerald-400 transition-all duration-300 shadow-[0_0_20px_rgba(16,185,129,0.3)]"
+            >
+              SYSTEM CHECK IN
+            </button>
+          )}
         </div>
       </div>
 
@@ -627,7 +679,35 @@ export default function Dashboard() {
 
       </div>
 
+      {systemStatus === 'Checked_Out' && (
+        <div className="absolute inset-0 z-[100] bg-black/60 backdrop-blur-sm rounded-xl flex items-center justify-center border border-zinc-800/50">
+          <div className="text-center space-y-4">
+            <Radio size={48} className="text-zinc-600 mx-auto animate-pulse" />
+            <h2 className="text-2xl font-mono font-bold tracking-widest text-zinc-400">SYSTEM OFFLINE</h2>
+            <p className="text-zinc-500 font-mono text-sm max-w-sm mx-auto">
+              You are currently checked out. The environment is in standby mode. Check in to resume operations and resolve missed tasks.
+            </p>
+            <button 
+              onClick={handleCheckIn}
+              className="mt-4 bg-emerald-500 hover:bg-emerald-400 text-black px-8 py-3 rounded-xl font-mono font-bold tracking-widest transition-all duration-300 shadow-[0_0_30px_rgba(16,185,129,0.2)]"
+            >
+              INITIALIZE SYSTEM CHECK-IN
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Modals */}
+      {showRecoveryModal && (
+        <RecoveryModal 
+          missedTasks={missedTasks}
+          onClose={() => setShowRecoveryModal(false)}
+          onComplete={() => {
+            setShowRecoveryModal(false)
+            fetchDashboardData()
+          }}
+        />
+      )}
       {showWeeklyModal && (
         <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center backdrop-blur-sm p-4">
           <div className="bg-[#050505] border border-zinc-800 p-8 rounded-2xl w-full max-w-md shadow-2xl relative overflow-hidden">
