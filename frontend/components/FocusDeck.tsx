@@ -20,6 +20,7 @@ class AudioEngine {
   animationFrame: number = 0;
   angle: number = 0;
   is3D: boolean = true;
+  isPlaying: boolean = false;
   
   constructor() {
     this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -68,8 +69,6 @@ class AudioEngine {
       this.panners[s.id] = panner;
       this.gains[s.id] = gain;
     });
-
-    this.animate();
   }
   
   setVolume(id: string, vol: number) {
@@ -82,13 +81,24 @@ class AudioEngine {
   
   play() {
     this.ctx.resume();
+    this.isPlaying = true;
     Object.keys(this.sources).forEach(id => {
       this.sources[id].play().catch(()=>{});
     });
+    // Start animation loop if not already running
+    if (!this.animationFrame) {
+      this.animate();
+    }
   }
   
   pause() {
+    this.isPlaying = false;
     Object.keys(this.sources).forEach(id => this.sources[id].pause());
+    // Stop animation loop
+    if (this.animationFrame) {
+      cancelAnimationFrame(this.animationFrame);
+      this.animationFrame = 0;
+    }
   }
 
   set3D(enabled: boolean) {
@@ -102,6 +112,10 @@ class AudioEngine {
   }
   
   animate = () => {
+    if (!this.isPlaying) {
+      this.animationFrame = 0;
+      return;
+    }
     if (this.is3D) {
       this.angle += 0.003;
       Object.values(this.panners).forEach((panner, i) => {

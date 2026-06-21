@@ -3,11 +3,13 @@ import { apiFetch } from '@/lib/api';
 import { useState, useEffect, useRef } from 'react'
 import { Plus, CheckCircle2, Circle, Clock, Calendar, Activity, ShieldCheck, Radio, Sparkles, Pencil, RefreshCw } from 'lucide-react'
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Sector, CartesianGrid } from 'recharts'
-import TaskModal from '@/components/TaskModal'
-import DayManagerModal from '@/components/DayManagerModal'
+import dynamic from 'next/dynamic'
 import PomodoroFocus from '@/components/PomodoroFocus'
 import NotificationBell from '@/components/NotificationBell'
 import { getLocalISODate, getAPIUrl } from '@/components/dateUtils'
+
+const TaskModal = dynamic(() => import('@/components/TaskModal'), { ssr: false })
+const DayManagerModal = dynamic(() => import('@/components/DayManagerModal'), { ssr: false })
 
 import { COLORS, BADGE_COLORS } from '@/lib/constants'
 import { getTaskTimeStatus, findFocusTask, getFocusQuote } from '@/lib/taskUtils'
@@ -18,10 +20,10 @@ const CustomPie = Pie as any;
 
 export default function Dashboard() {
   const { user } = useAuth()
-  const [metrics, setMetrics] = useState<{ kpi: { todo: number, in_progress: number, done: number }, categories: { name: string, value: number }[] }>({ 
-    kpi: { todo: 0, in_progress: 0, done: 0 }, categories: [] 
+  const [metrics, setMetrics] = useState<{ kpi: { todo: number, in_progress: number, done: number }, categories: { name: string, value: number }[] }>({
+    kpi: { todo: 0, in_progress: 0, done: 0 }, categories: []
   })
-  
+
   const [monthTasks, setMonthTasks] = useState<any[]>([])
   const [isTaskModalOpen, setTaskModalOpen] = useState(false)
   const [showWeeklyModal, setShowWeeklyModal] = useState(false)
@@ -29,19 +31,29 @@ export default function Dashboard() {
   const [taskModalDate, setTaskModalDate] = useState<string | undefined>(undefined)
   const [editingTask, setEditingTask] = useState<any>(null)
   const [activeTaskProgress, setActiveTaskProgress] = useState<{ id: string, progress: number, isActive: boolean } | null>(null)
-  
+
   // Check in/out state
   const [systemStatus, setSystemStatus] = useState<string>('Checked_In')
   const [showRecoveryModal, setShowRecoveryModal] = useState(false)
   const [missedTasks, setMissedTasks] = useState<any[]>([])
-  
+
   // Day Manager Modal State
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
-  
+
   // Interactive selected/hovered day state
   const [displayDate, setDisplayDate] = useState<string>('')
   const [activePieIndex, setActivePieIndex] = useState<number | null>(null)
-  const [currentTime, setCurrentTime] = useState<Date>(new Date())
+  const [minuteTick, setMinuteTick] = useState(0)
+
+  useEffect(() => {
+    setDisplayDate(getLocalISODate())
+    const interval = setInterval(() => {
+      setMinuteTick(t => t + 1)
+    }, 30000) // Update every 30 seconds to refresh relative task time statuses
+    return () => {
+      clearInterval(interval)
+    }
+  }, [])
 
   // Generate Current Month Dates
   const getDaysInCurrentMonth = () => {
@@ -49,13 +61,13 @@ export default function Dashboard() {
     const year = date.getFullYear();
     const month = date.getMonth();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    
+
     return Array.from({ length: daysInMonth }, (_, i) => {
       const d = new Date(year, month, i + 1);
       return getLocalISODate(d);
     });
   }
-  
+
   const monthDates = getDaysInCurrentMonth();
 
   const fetchDashboardData = async () => {
@@ -76,10 +88,10 @@ export default function Dashboard() {
       const settingsRes = await apiFetch(`${getAPIUrl()}/api/auth/me`)
       const settingsData = await settingsRes.json()
       const settings = settingsData.settings || {}
-      
+
       const newStatus = settings.system_status || 'Checked_In'
       setSystemStatus(newStatus)
-      
+
       const biologicalDate = settings.biological_date || getLocalISODate()
       setDisplayDate(biologicalDate)
 
@@ -90,7 +102,7 @@ export default function Dashboard() {
       // Fetch All Tasks for Current Month
       const startOfMonth = getDaysInCurrentMonth()[0]
       const endOfMonth = getDaysInCurrentMonth()[getDaysInCurrentMonth().length - 1]
-      
+
       const tasksRes = await apiFetch(`${getAPIUrl()}/api/tasks/weekly?start_date=${startOfMonth}&end_date=${endOfMonth}`)
       setMonthTasks(await tasksRes.json())
     } catch (err) {
@@ -138,7 +150,7 @@ export default function Dashboard() {
       const data = await res.json()
       setSystemStatus('Checked_In')
       setDisplayDate(data.biological_date || getLocalISODate())
-      
+
       // Check for missed tasks immediately
       const missedRes = await apiFetch(`${getAPIUrl()}/api/tasks/missed`)
       const missedData = await missedRes.json()
@@ -146,7 +158,7 @@ export default function Dashboard() {
         setMissedTasks(missedData)
         setShowRecoveryModal(true)
       }
-      
+
       fetchDashboardData()
     } catch (err) {
       alert("Error checking in")
@@ -169,7 +181,7 @@ export default function Dashboard() {
     if (total <= 2) bg = 'bg-accent-dev/10 text-accent-dev border border-accent-dev/20 hover:border-accent-dev/50'
     else if (total <= 4) bg = 'bg-accent-dev/20 text-accent-dev border border-accent-dev/40 hover:border-accent-dev/70'
     else bg = 'bg-accent-dev/40 text-sky-200 border border-accent-dev/60 hover:border-accent-dev/90'
-    
+
     if (isHovered) {
       return `${bg} ring-2 ring-accent-dev/30 shadow-[0_0_15px_rgba(56,189,248,0.2)]`
     }
@@ -179,10 +191,10 @@ export default function Dashboard() {
   const toggleTaskStatus = async (id: string, currentStatus: string) => {
     const newStatus = currentStatus === 'Done' ? 'To-Do' : 'Done'
     const originalTasks = [...monthTasks]
-    
+
     // Optimistic UI Update
     setMonthTasks(prev => prev.map(t => t._id === id ? { ...t, status: newStatus } : t))
-    
+
     try {
       const res = await apiFetch(`${getAPIUrl()}/api/tasks/${id}/status`, {
         method: 'PATCH',
@@ -190,7 +202,7 @@ export default function Dashboard() {
         body: JSON.stringify({ status: newStatus })
       })
       if (!res.ok) throw new Error('Failed to update status')
-      
+
       // Refresh KPIs after toggle
       const metricsData = await apiFetch(`${getAPIUrl()}/api/dashboard/metrics`).then(res => res.json())
       setMetrics(metricsData)
@@ -205,7 +217,7 @@ export default function Dashboard() {
   // Local calculations for the selected/hovered display date
   const activeDate = displayDate || getLocalISODate()
   const displayTasks = monthTasks.filter(t => t.date === activeDate)
-  
+
   const displayKPI = {
     todo: displayTasks.filter(t => t.status === 'To-Do').length,
     in_progress: displayTasks.filter(t => t.status === 'In Progress').length,
@@ -214,7 +226,7 @@ export default function Dashboard() {
 
   const totalDisplay = displayTasks.length
   const completedDisplay = displayKPI.done
-  
+
   const totalCompletionSum = displayTasks.reduce((acc, t) => {
     if (t.status === 'Done') return acc + 100
     if (activeTaskProgress && t._id === activeTaskProgress.id) return acc + activeTaskProgress.progress
@@ -320,7 +332,7 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex items-center gap-4">
-          <button 
+          <button
             onClick={() => {
               fetchDashboardData()
             }}
@@ -331,14 +343,14 @@ export default function Dashboard() {
           </button>
           <NotificationBell />
           {systemStatus === 'Checked_In' ? (
-            <button 
+            <button
               onClick={handleCheckOut}
               className="bg-rose-500/10 border border-rose-500/30 text-rose-500 px-5 py-2.5 rounded-lg font-mono text-xs font-bold tracking-widest hover:bg-rose-500/20 transition-all duration-300 shadow-[0_0_15px_rgba(244,63,94,0.05)]"
             >
               SYSTEM CHECK OUT
             </button>
           ) : (
-            <button 
+            <button
               onClick={handleCheckIn}
               className="bg-emerald-500 border border-emerald-500/30 text-black px-5 py-2.5 rounded-lg font-mono text-xs font-bold tracking-widest hover:bg-emerald-400 transition-all duration-300 shadow-[0_0_20px_rgba(16,185,129,0.3)]"
             >
@@ -350,10 +362,10 @@ export default function Dashboard() {
 
       {/* Main Asymmetric Grid */}
       <div className="grid grid-cols-12 gap-6">
-        
+
         {/* Left Side: Telemetry Scrub Calendar & Analytics (Col-span 8) */}
         <div className="col-span-12 xl:col-span-8 space-y-6">
-          
+
           {/* Tactical Scrub Calendar */}
           <div className="relative z-50 cinematic-panel !overflow-visible p-5 rounded-xl border border-zinc-800/40">
             <div className="flex justify-between items-center mb-4">
@@ -373,7 +385,7 @@ export default function Dashboard() {
                 const isToday = date === getLocalISODate();
 
                 return (
-                  <div 
+                  <div
                     key={date}
                     className={`relative group hover:z-[70] flex flex-col items-center justify-center h-12 rounded-lg cursor-default transition-all duration-300 ${getIntensityClass(dayTasks.length, isHovered)} ${isToday && !isHovered ? 'border-amber-500/30 bg-amber-500/5' : ''}`}
                   >
@@ -389,17 +401,17 @@ export default function Dashboard() {
                         {doneCount}/{dayTasks.length}
                       </span>
                     )}
-                    
+
                     {/* Hover Menu Overlay */}
                     <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-[60] flex flex-col gap-1.5 bg-zinc-950/95 backdrop-blur-xl border border-zinc-700/50 p-2 rounded-xl shadow-[0_15px_35px_-5px_rgba(0,0,0,0.8),0_0_15px_rgba(56,189,248,0.1)] min-w-[150px]">
-                      <button 
+                      <button
                         onClick={(e) => { e.stopPropagation(); setSelectedDay(date); }}
                         className="w-full flex items-center gap-2.5 px-3 py-2 bg-zinc-900/50 hover:bg-amber-500/15 border border-zinc-800/50 hover:border-amber-500/40 rounded-lg font-mono text-[10px] font-semibold tracking-wider text-zinc-300 hover:text-amber-400 transition-all duration-300 group/btn shadow-inner"
                       >
                         <CheckCircle2 size={13} className="text-amber-500/70 group-hover/btn:text-amber-400 group-hover/btn:scale-110 transition-all" />
                         <span>TASKS</span>
                       </button>
-                      <button 
+                      <button
                         onClick={(e) => { e.stopPropagation(); setDisplayDate(date); }}
                         className="w-full flex items-center gap-2.5 px-3 py-2 bg-zinc-900/50 hover:bg-sky-500/15 border border-zinc-800/50 hover:border-sky-500/40 rounded-lg font-mono text-[10px] font-semibold tracking-wider text-zinc-300 hover:text-sky-400 transition-all duration-300 group/btn shadow-inner"
                       >
@@ -430,13 +442,13 @@ export default function Dashboard() {
 
           {/* Charts Section */}
           <div className="relative cinematic-panel p-5 rounded-xl border border-zinc-800/40 overflow-hidden group">
-            <img 
-              src="/blackhole2.gif" 
-              alt="Blackhole Background" 
-              className="absolute inset-0 w-full h-full object-cover opacity-60 pointer-events-none group-hover:opacity-75 group-hover:scale-[1.02] transition-all duration-1000" 
+            <img
+              src="/blackhole2.gif"
+              alt="Blackhole Background"
+              className="absolute inset-0 w-full h-full object-cover opacity-60 pointer-events-none group-hover:opacity-75 group-hover:scale-[1.02] transition-all duration-1000"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/95 via-zinc-950/70 to-zinc-950/30 pointer-events-none z-0" />
-            
+
             <div className="relative z-10">
               <div className="flex justify-between items-center mb-4">
                 <div className="flex items-center gap-2">
@@ -446,91 +458,91 @@ export default function Dashboard() {
                 <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shadow-[0_0_8px_rgba(251,191,36,0.8)]" />
               </div>
 
-            {displayCategories.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Pie Chart */}
-                <div className="bg-zinc-950/40 border border-zinc-900/55 p-4 rounded-lg flex flex-col h-[320px] shadow-[inset_0_0_20px_rgba(0,0,0,0.5)]">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse" />
-                    <h4 className="text-[10px] font-mono text-zinc-500 tracking-wider uppercase">Category Focus Share</h4>
+              {displayCategories.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Pie Chart */}
+                  <div className="bg-zinc-950/40 border border-zinc-900/55 p-4 rounded-lg flex flex-col h-[320px] shadow-[inset_0_0_20px_rgba(0,0,0,0.5)]">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse" />
+                      <h4 className="text-[10px] font-mono text-zinc-500 tracking-wider uppercase">Category Focus Share</h4>
+                    </div>
+                    <div className="flex-1 min-h-0 relative">
+                      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                        <PieChart>
+                          <CustomPie
+                            data={displayCategories}
+                            dataKey="value"
+                            nameKey="name"
+                            innerRadius={50}
+                            outerRadius={80}
+                            isAnimationActive={false}
+                            activeIndex={activePieIndex !== null ? activePieIndex : undefined}
+                            activeShape={renderActiveShape}
+                            onMouseEnter={(_: any, index: number) => setActivePieIndex(index)}
+                            onMouseLeave={() => setActivePieIndex(null)}
+                            label={({ cx, cy, midAngle, outerRadius, percent, name }: any) => {
+                              const RADIAN = Math.PI / 180;
+                              const radius = outerRadius * 1.25;
+                              const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                              const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                              return (
+                                <text x={x} y={y} fill={COLORS[name as keyof typeof COLORS] || '#71717a'} textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={9} fontFamily="monospace" fontWeight="bold">
+                                  {`${name} (${(percent * 100).toFixed(0)}%)`}
+                                </text>
+                              );
+                            }}
+                          >
+                            {displayCategories.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={COLORS[entry.name as keyof typeof COLORS]} stroke="#09090b" strokeWidth={3} />
+                            ))}
+                          </CustomPie>
+                          <RechartsTooltip content={<CustomPieTooltip />} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
                   </div>
-                  <div className="flex-1 min-h-0 relative">
-                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-                      <PieChart>
-                        <CustomPie 
-                          data={displayCategories} 
-                          dataKey="value" 
-                          nameKey="name" 
-                          innerRadius={50} 
-                          outerRadius={80}
-                          isAnimationActive={false}
-                          activeIndex={activePieIndex !== null ? activePieIndex : undefined}
-                          activeShape={renderActiveShape}
-                          onMouseEnter={(_: any, index: number) => setActivePieIndex(index)}
-                          onMouseLeave={() => setActivePieIndex(null)}
-                          label={({ cx, cy, midAngle, outerRadius, percent, name }: any) => {
-                            const RADIAN = Math.PI / 180;
-                            const radius = outerRadius * 1.25;
-                            const x = cx + radius * Math.cos(-midAngle * RADIAN);
-                            const y = cy + radius * Math.sin(-midAngle * RADIAN);
-                            return (
-                              <text x={x} y={y} fill={COLORS[name as keyof typeof COLORS] || '#71717a'} textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={9} fontFamily="monospace" fontWeight="bold">
-                                {`${name} (${(percent * 100).toFixed(0)}%)`}
-                              </text>
-                            );
-                          }}
-                        >
-                          {displayCategories.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[entry.name as keyof typeof COLORS]} stroke="#09090b" strokeWidth={3} />
-                          ))}
-                        </CustomPie>
-                        <RechartsTooltip content={<CustomPieTooltip />} />
-                      </PieChart>
-                    </ResponsiveContainer>
+
+                  {/* Bar Chart */}
+                  <div className="bg-zinc-950/40 border border-zinc-900/55 p-4 rounded-lg flex flex-col h-[320px] shadow-[inset_0_0_20px_rgba(0,0,0,0.5)]">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                      <h4 className="text-[10px] font-mono text-zinc-500 tracking-wider uppercase">Completion Status</h4>
+                    </div>
+                    <div className="flex-1 min-h-0">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={displayCategories} margin={{ top: 20, right: 10, left: -25, bottom: 5 }} barSize={16}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                          <XAxis dataKey="name" stroke="#52525b" tick={{ fill: '#71717a', fontSize: 9, fontFamily: 'monospace' }} axisLine={false} tickLine={false} />
+                          <YAxis stroke="#52525b" tick={{ fill: '#71717a', fontSize: 9, fontFamily: 'monospace' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                          <RechartsTooltip cursor={{ fill: 'rgba(255,255,255,0.03)' }} contentStyle={{ backgroundColor: '#0d0d12', borderColor: '#27272a', borderRadius: '8px' }} />
+                          <Bar dataKey="completed" name="Completed" stackId="a" fill="#10b981" isAnimationActive={false} radius={[0, 0, 0, 0]} />
+                          <Bar dataKey="in_progress" name="In Progress" stackId="a" fill="#f59e0b" isAnimationActive={false} radius={[0, 0, 0, 0]} />
+                          <Bar dataKey="remaining" name="Remaining" stackId="a" fill="#e11d48" isAnimationActive={false} radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
                   </div>
                 </div>
-                
-                {/* Bar Chart */}
-                <div className="bg-zinc-950/40 border border-zinc-900/55 p-4 rounded-lg flex flex-col h-[320px] shadow-[inset_0_0_20px_rgba(0,0,0,0.5)]">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
-                    <h4 className="text-[10px] font-mono text-zinc-500 tracking-wider uppercase">Completion Status</h4>
-                  </div>
-                  <div className="flex-1 min-h-0">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={displayCategories} margin={{ top: 20, right: 10, left: -25, bottom: 5 }} barSize={16}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                        <XAxis dataKey="name" stroke="#52525b" tick={{ fill: '#71717a', fontSize: 9, fontFamily: 'monospace' }} axisLine={false} tickLine={false} />
-                        <YAxis stroke="#52525b" tick={{ fill: '#71717a', fontSize: 9, fontFamily: 'monospace' }} axisLine={false} tickLine={false} allowDecimals={false} />
-                        <RechartsTooltip cursor={{fill: 'rgba(255,255,255,0.03)'}} contentStyle={{ backgroundColor: '#0d0d12', borderColor: '#27272a', borderRadius: '8px' }} />
-                        <Bar dataKey="completed" name="Completed" stackId="a" fill="#10b981" isAnimationActive={false} radius={[0, 0, 0, 0]} />
-                        <Bar dataKey="in_progress" name="In Progress" stackId="a" fill="#f59e0b" isAnimationActive={false} radius={[0, 0, 0, 0]} />
-                        <Bar dataKey="remaining" name="Remaining" stackId="a" fill="#e11d48" isAnimationActive={false} radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="h-72 flex flex-col items-center justify-center bg-zinc-950/30 rounded-lg border border-zinc-900/50 gap-4">
-                <p className="text-zinc-600 font-mono text-xs tracking-wider">
+              ) : (
+                <div className="h-72 flex flex-col items-center justify-center bg-zinc-950/30 rounded-lg border border-zinc-900/50 gap-4">
+                  <p className="text-zinc-600 font-mono text-xs tracking-wider">
                   // TELEMETRY_STANDBY: NO MISSION SCHEDULING DETECTED
-                </p>
-                <button 
-                  onClick={() => { setTaskModalDate(activeDate); setTaskModalOpen(true); }}
-                  className="bg-amber-500/10 border border-amber-500/30 text-amber-500 hover:bg-amber-500/25 px-4 py-2 rounded-lg font-mono text-xs font-semibold tracking-wider transition-all duration-300"
-                >
-                  SCHEDULE_TASK
-                </button>
-              </div>
-            )}
+                  </p>
+                  <button
+                    onClick={() => { setTaskModalDate(activeDate); setTaskModalOpen(true); }}
+                    className="bg-amber-500/10 border border-amber-500/30 text-amber-500 hover:bg-amber-500/25 px-4 py-2 rounded-lg font-mono text-xs font-semibold tracking-wider transition-all duration-300"
+                  >
+                    SCHEDULE_TASK
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
         {/* Right Side: Mission Details & Interactive Task Checkbox Console (Col-span 4) */}
         <div className="col-span-12 xl:col-span-4 space-y-6">
-          
+
           {/* Circular Telemetry Gauge */}
           <div className="cinematic-panel p-5 rounded-xl border border-zinc-800/40 flex items-center justify-between">
             <div className="space-y-1.5 font-mono">
@@ -550,22 +562,22 @@ export default function Dashboard() {
             <div className="relative w-24 h-24 flex items-center justify-center">
               <svg className="w-full h-full transform -rotate-90">
                 {/* Track circle */}
-                <circle 
-                  cx="48" 
-                  cy="48" 
-                  r={radius} 
-                  className="stroke-zinc-900" 
-                  strokeWidth="6" 
-                  fill="transparent" 
+                <circle
+                  cx="48"
+                  cy="48"
+                  r={radius}
+                  className="stroke-zinc-900"
+                  strokeWidth="6"
+                  fill="transparent"
                 />
                 {/* Completion indicator circle */}
-                <circle 
-                  cx="48" 
-                  cy="48" 
-                  r={radius} 
-                  className="stroke-amber-500 transition-all duration-500" 
-                  strokeWidth="6" 
-                  fill="transparent" 
+                <circle
+                  cx="48"
+                  cy="48"
+                  r={radius}
+                  className="stroke-amber-500 transition-all duration-500"
+                  strokeWidth="6"
+                  fill="transparent"
                   strokeDasharray={circumference}
                   strokeDashoffset={strokeDashoffset}
                   strokeLinecap="round"
@@ -578,8 +590,8 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <PomodoroFocus 
-            availableTasks={displayTasks.filter(t => t.status !== 'Done')} 
+          <PomodoroFocus
+            availableTasks={displayTasks.filter(t => t.status !== 'Done')}
             onProgressUpdate={(id, progress, isActive) => setActiveTaskProgress({ id, progress, isActive })}
           />
 
@@ -608,8 +620,8 @@ export default function Dashboard() {
                 </div>
               ) : (
                 displayTasks.filter(t => t.status !== 'Done').map(task => (
-                  <div 
-                    key={task._id} 
+                  <div
+                    key={task._id}
                     className="bg-zinc-950/80 border border-zinc-900 hover:border-zinc-800/60 p-3 rounded-lg flex items-center justify-between gap-3 transition-all duration-300 group"
                   >
                     <div className="flex-1 min-w-0 space-y-1.5">
@@ -623,9 +635,9 @@ export default function Dashboard() {
                         {(() => {
                           const isPomodoroActive = activeTaskProgress?.id === task._id && activeTaskProgress?.isActive;
                           const timeStatus = getTaskTimeStatus(task.date, task.time, task.duration, task.status, isPomodoroActive);
-                          
+
                           if (!task.time && !timeStatus) return null;
-                          
+
                           return (
                             <span className={`text-[8px] font-mono flex items-center gap-1.5 ${timeStatus?.color || 'text-zinc-500'}`}>
                               {task.time && (
@@ -643,13 +655,13 @@ export default function Dashboard() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button 
+                      <button
                         onClick={() => setEditingTask(task)}
                         className="p-1 opacity-0 group-hover:opacity-100 transition-all hover:scale-105 text-zinc-500 hover:text-amber-400"
                       >
                         <Pencil size={14} />
                       </button>
-                      <button 
+                      <button
                         onClick={() => toggleTaskStatus(task._id, task.status)}
                         className="p-1 hover:scale-105 transition-transform"
                       >
@@ -667,7 +679,7 @@ export default function Dashboard() {
 
             {/* Quick append input */}
             <div className="mt-3 pt-3 border-t border-zinc-900">
-              <button 
+              <button
                 onClick={() => { setTaskModalDate(activeDate); setTaskModalOpen(true); }}
                 className="w-full bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-850 hover:border-zinc-800/80 text-zinc-400 hover:text-zinc-100 font-mono text-[10px] font-bold py-2 rounded-lg transition-all duration-300 flex items-center justify-center gap-1.5"
               >
@@ -687,7 +699,7 @@ export default function Dashboard() {
             <p className="text-zinc-500 font-mono text-sm max-w-sm mx-auto">
               You are currently checked out. The environment is in standby mode. Check in to resume operations and resolve missed tasks.
             </p>
-            <button 
+            <button
               onClick={handleCheckIn}
               className="mt-4 bg-emerald-500 hover:bg-emerald-400 text-black px-8 py-3 rounded-xl font-mono font-bold tracking-widest transition-all duration-300 shadow-[0_0_30px_rgba(16,185,129,0.2)]"
             >
@@ -699,7 +711,7 @@ export default function Dashboard() {
 
       {/* Modals */}
       {showRecoveryModal && (
-        <RecoveryModal 
+        <RecoveryModal
           missedTasks={missedTasks}
           onClose={() => setShowRecoveryModal(false)}
           onComplete={() => {
@@ -714,15 +726,15 @@ export default function Dashboard() {
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-purple-500"></div>
             <h2 className="text-2xl font-[600] text-white mb-2 font-mono uppercase tracking-tight">Weekly Briefing</h2>
             <p className="text-zinc-400 text-sm mb-6 font-[300]">Your engine has been provisioned for the upcoming week. Base protocols have been deployed, and Work/School tasks have been successfully stripped from your off days.</p>
-            
+
             <div className="bg-zinc-900/50 rounded-xl p-4 mb-6 border border-zinc-800">
-               <p className="text-zinc-300 text-sm font-mono flex items-center gap-2 mb-2"><CheckCircle2 className="text-emerald-500" size={16}/> {weeklyDeployedCount} Tasks Deployed</p>
-               <p className="text-zinc-300 text-sm font-mono flex items-center gap-2"><CheckCircle2 className="text-emerald-500" size={16}/> Auto-Telemetry Active</p>
+              <p className="text-zinc-300 text-sm font-mono flex items-center gap-2 mb-2"><CheckCircle2 className="text-emerald-500" size={16} /> {weeklyDeployedCount} Tasks Deployed</p>
+              <p className="text-zinc-300 text-sm font-mono flex items-center gap-2"><CheckCircle2 className="text-emerald-500" size={16} /> Auto-Telemetry Active</p>
             </div>
-            
+
             <p className="text-xs text-zinc-500 mb-6 italic font-[300]">You can surgically edit or delete any auto-generated tasks on your timeline without affecting your master templates.</p>
 
-            <button 
+            <button
               onClick={() => {
                 setShowWeeklyModal(false);
                 const fetchDashboardData = async () => {
@@ -733,7 +745,7 @@ export default function Dashboard() {
 
                   const startOfMonth = monthDates[0];
                   const endOfMonth = monthDates[monthDates.length - 1];
-                  
+
                   apiFetch(`${getAPIUrl()}/api/tasks/weekly?start_date=${startOfMonth}&end_date=${endOfMonth}`)
                     .then(res => res.json())
                     .then(data => setMonthTasks(data))
@@ -750,7 +762,7 @@ export default function Dashboard() {
       )}
 
       {isTaskModalOpen && (
-        <TaskModal 
+        <TaskModal
           onClose={() => {
             setTaskModalOpen(false);
             // Refresh dashboard tasks and KPIs
@@ -765,13 +777,13 @@ export default function Dashboard() {
               .then(res => res.json())
               .then(data => setMonthTasks(data))
               .catch(err => console.error(err))
-          }} 
-          defaultDate={taskModalDate} 
+          }}
+          defaultDate={taskModalDate}
         />
       )}
 
       {editingTask && (
-        <TaskModal 
+        <TaskModal
           onClose={() => {
             setEditingTask(null);
             // Refresh dashboard tasks and KPIs
@@ -786,13 +798,13 @@ export default function Dashboard() {
               .then(res => res.json())
               .then(data => setMonthTasks(data))
               .catch(err => console.error(err))
-          }} 
-          editTask={editingTask} 
+          }}
+          editTask={editingTask}
         />
       )}
 
       {selectedDay && (
-        <DayManagerModal 
+        <DayManagerModal
           date={selectedDay}
           tasks={monthTasks.filter(t => t.date === selectedDay)}
           onClose={() => setSelectedDay(null)}

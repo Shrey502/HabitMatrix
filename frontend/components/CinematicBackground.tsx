@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 interface Star {
   x: number
@@ -11,6 +11,21 @@ interface Star {
 
 export default function CinematicBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [ecoMode, setEcoMode] = useState(false)
+
+  // Listen to Eco Mode changes
+  useEffect(() => {
+    const checkEcoMode = () => {
+      const mode = localStorage.getItem('performance_mode') === 'true'
+      setEcoMode(mode)
+    }
+
+    checkEcoMode()
+    window.addEventListener('performance_mode_changed', checkEcoMode)
+    return () => {
+      window.removeEventListener('performance_mode_changed', checkEcoMode)
+    }
+  }, [])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -20,9 +35,10 @@ export default function CinematicBackground() {
 
     let animationId: number
     let stars: Star[] = []
-    const numStars = 120
+    const numStars = ecoMode ? 40 : 120
     let width = (canvas.width = window.innerWidth)
     let height = (canvas.height = window.innerHeight)
+    let isDrawing = true
 
     // Mouse coordinates (default to center)
     const mouse = { x: width / 2, y: height / 2, targetX: width / 2, targetY: height / 2 }
@@ -32,6 +48,9 @@ export default function CinematicBackground() {
       width = canvas.width = window.innerWidth
       height = canvas.height = window.innerHeight
       initStars()
+      if (ecoMode) {
+        drawStatic()
+      }
     }
 
     const initStars = () => {
@@ -52,12 +71,28 @@ export default function CinematicBackground() {
       mouse.targetY = e.clientY
     }
 
-    window.addEventListener('resize', resize)
-    window.addEventListener('mousemove', handleMouseMove)
+    const drawStatic = () => {
+      if (!ctx) return
+      ctx.fillStyle = '#030305' // Deep space black-blue
+      ctx.fillRect(0, 0, width, height)
 
-    initStars()
+      // Render static stars without lensing
+      stars.forEach(star => {
+        // Project 3D coordinates to 2D
+        let sx = (star.x - width / 2) * (width / star.z) + width / 2
+        let sy = (star.y - height / 2) * (width / star.z) + height / 2
+
+        if (sx >= 0 && sx <= width && sy >= 0 && sy <= height) {
+          ctx.beginPath()
+          ctx.arc(sx, sy, star.size * (width / star.z) * 0.3, 0, Math.PI * 2)
+          ctx.fillStyle = star.color
+          ctx.fill()
+        }
+      })
+    }
 
     const draw = () => {
+      if (!isDrawing) return
       ctx.fillStyle = '#030305' // Deep space black-blue
       ctx.fillRect(0, 0, width, height)
 
@@ -115,19 +150,57 @@ export default function CinematicBackground() {
         }
       })
 
-      // Removed sci-fi text readouts
-
       animationId = requestAnimationFrame(draw)
     }
 
-    draw()
+    // Window Visibility API & Focus state to save CPU/GPU cycles when user is in another tab
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        isDrawing = false
+        cancelAnimationFrame(animationId)
+      } else {
+        if (!isDrawing && !ecoMode) {
+          isDrawing = true
+          draw()
+        }
+      }
+    }
+
+    const handleFocus = () => {
+      if (!isDrawing && !ecoMode) {
+        isDrawing = true
+        draw()
+      }
+    }
+
+    const handleBlur = () => {
+      isDrawing = false
+      cancelAnimationFrame(animationId)
+    }
+
+    window.addEventListener('resize', resize)
+    if (!ecoMode) {
+      window.addEventListener('mousemove', handleMouseMove)
+      document.addEventListener('visibilitychange', handleVisibilityChange)
+      window.addEventListener('focus', handleFocus)
+      window.addEventListener('blur', handleBlur)
+      
+      initStars()
+      draw()
+    } else {
+      initStars()
+      drawStatic()
+    }
 
     return () => {
       window.removeEventListener('resize', resize)
       window.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleFocus)
+      window.removeEventListener('blur', handleBlur)
       cancelAnimationFrame(animationId)
     }
-  }, [])
+  }, [ecoMode])
 
   return (
     <canvas

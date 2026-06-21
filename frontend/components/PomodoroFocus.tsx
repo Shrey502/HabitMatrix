@@ -24,7 +24,7 @@ export default function PomodoroFocus({
   const [minutesLate, setMinutesLate] = useState(0)
 
   const selectedTask = availableTasks.find(t => t._id === taskId)
-  const currentProgress = initialTime > 0 ? ((initialTime - timeLeft) / initialTime) * 100 : 0
+  const currentProgress = initialTime > 0 ? Math.round(((initialTime - timeLeft) / initialTime) * 100) : 0
 
   // Bubble up progress
   useEffect(() => {
